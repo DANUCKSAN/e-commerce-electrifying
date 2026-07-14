@@ -1,36 +1,74 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# PV to EV marketplace
 
-## Getting Started
+A Next.js App Router storefront for solar, storage, and EV charging products. The homepage is a Server Component that reads the product catalogue from Neon PostgreSQL with Drizzle ORM. A small client-side quote basket demonstrates Zustand without moving database data into global client state.
 
-First, run the development server:
+## Stack
+
+- Next.js 16, React 19, and TypeScript
+- ESLint 9 and Tailwind CSS 4
+- GSAP and ScrollTrigger for the landing-page motion system
+- Better Auth with email/password authentication
+- Neon PostgreSQL and the Neon HTTP driver
+- Drizzle ORM and Drizzle Kit
+- Zustand with a request-scoped vanilla store provider
+
+## Local setup
+
+Use Node.js 20.9 or newer.
+
+1. Install dependencies:
+
+   ```bash
+   npm install
+   ```
+
+2. Create your local environment file:
+
+   ```bash
+   cp .env.example .env.local
+   ```
+
+3. Replace `DATABASE_URL` with a Neon connection string and set a random `BETTER_AUTH_SECRET` containing at least 32 characters.
+
+4. Generate and apply the PostgreSQL migration:
+
+   ```bash
+   npm run db:generate
+   npm run db:migrate
+   ```
+
+5. Seed the solar catalogue:
+
+   ```bash
+   npm run db:seed
+   ```
+
+6. Start the app:
+
+   ```bash
+   npm run dev
+   ```
+
+Open [http://localhost:3000](http://localhost:3000). Better Auth is mounted at `/api/auth/[...all]` and uses `/api/auth` as its default base path.
+
+When `DATABASE_URL` is missing during local development, the homepage renders the same curated sample records as a labeled preview. As soon as Neon is configured, the page runs the Drizzle query and renders the live `products` rows. Production requires `DATABASE_URL`, `BETTER_AUTH_SECRET`, and `BETTER_AUTH_URL` and fails fast if any are missing.
+
+## Database workflow
+
+| Command | Purpose |
+| --- | --- |
+| `npm run db:generate` | Generate SQL migrations from the Drizzle schemas |
+| `npm run db:migrate` | Apply committed migrations to Neon |
+| `npm run db:push` | Push schema changes directly during early development |
+| `npm run db:seed` | Insert the sample products idempotently by slug |
+| `npm run db:studio` | Open Drizzle Studio |
+
+The schema is split between Better Auth's generated tables and the application-owned products table under `src/db/schema`. Generated SQL is committed under `drizzle`.
+
+## Validation
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm run lint
+npm run typecheck
+npm run build
 ```
-
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
