@@ -92,26 +92,42 @@ const energyFlow = [
   },
 ] as const;
 
+let hasLoggedCatalogueFallback = false;
+
 async function getCatalogue(): Promise<CatalogueProduct[]> {
   if (!isDatabaseConfigured) return sampleProducts;
 
-  const liveProducts = await db
-    .select({
-      slug: products.slug,
-      name: products.name,
-      description: products.description,
-      category: products.category,
-      manufacturer: products.manufacturer,
-      specification: products.specification,
-      priceCents: products.priceCents,
-      stock: products.stock,
-      featured: products.featured,
-    })
-    .from(products)
-    .orderBy(desc(products.featured), asc(products.name))
-    .limit(6);
+  try {
+    const liveProducts = await db
+      .select({
+        slug: products.slug,
+        name: products.name,
+        description: products.description,
+        category: products.category,
+        manufacturer: products.manufacturer,
+        specification: products.specification,
+        priceCents: products.priceCents,
+        stock: products.stock,
+        featured: products.featured,
+      })
+      .from(products)
+      .orderBy(desc(products.featured), asc(products.name))
+      .limit(6);
 
-  return liveProducts.length > 0 ? liveProducts : sampleProducts;
+    return liveProducts.length > 0 ? liveProducts : sampleProducts;
+  } catch (error) {
+    if (process.env.NODE_ENV === "production") throw error;
+
+    if (!hasLoggedCatalogueFallback) {
+      hasLoggedCatalogueFallback = true;
+      console.warn(
+        "Catalogue database is unavailable; rendering development sample products.",
+        error instanceof Error ? error.message : "Unknown database error",
+      );
+    }
+
+    return sampleProducts;
+  }
 }
 
 function productBadge(product: CatalogueProduct): {
@@ -123,7 +139,7 @@ function productBadge(product: CatalogueProduct): {
   return { label: "Ready to ship", tone: "neutral" };
 }
 
-export default async function Home() {
+export default async function StorefrontPage() {
   const catalogue = await getCatalogue();
 
   return (

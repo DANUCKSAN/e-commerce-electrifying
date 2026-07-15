@@ -8,22 +8,47 @@ const isProductionBuild =
 const isProductionRuntime =
   process.env.NODE_ENV === "production" && !isProductionBuild;
 
-if (isProductionRuntime && !configuredDatabaseUrl) {
-  throw new Error("DATABASE_URL is required in production.");
+function databaseConfigurationIssue(databaseUrl: string | undefined) {
+  if (!databaseUrl) return "DATABASE_URL is not set";
+
+  try {
+    const parsed = new URL(databaseUrl);
+
+    if (!new Set(["postgres:", "postgresql:"]).has(parsed.protocol)) {
+      return "DATABASE_URL must use the postgres or postgresql protocol";
+    }
+
+    if (
+      parsed.hostname === "your-neon-host.neon.tech" ||
+      parsed.hostname.includes("placeholder")
+    ) {
+      return "DATABASE_URL still contains a placeholder hostname";
+    }
+  } catch {
+    return "DATABASE_URL is not a valid URL";
+  }
+
+  return null;
 }
 
-const buildSafeDatabaseUrl =
-  configuredDatabaseUrl ??
-  "postgresql://placeholder:placeholder@localhost:5432/placeholder";
+const configurationIssue = databaseConfigurationIssue(configuredDatabaseUrl);
 
-export const isDatabaseConfigured = Boolean(configuredDatabaseUrl);
+if (isProductionRuntime && configurationIssue) {
+  throw new Error(`Invalid database configuration: ${configurationIssue}.`);
+}
+
+export const isDatabaseConfigured = configurationIssue === null;
+
+const buildSafeDatabaseUrl = isDatabaseConfigured
+  ? configuredDatabaseUrl!
+  : "postgresql://placeholder:placeholder@localhost:5432/placeholder";
 
 export const db = drizzle(buildSafeDatabaseUrl, { schema });
 
 export function requireDatabaseConfiguration() {
-  if (!configuredDatabaseUrl) {
+  if (configurationIssue) {
     throw new Error(
-      "DATABASE_URL is not set. Copy .env.example to .env.local and add your Neon connection string.",
+      `Invalid database configuration: ${configurationIssue}. Set a valid PostgreSQL connection string in .env.local.`,
     );
   }
 }

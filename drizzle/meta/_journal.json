@@ -8,6 +8,13 @@
       "when": 1783924560220,
       "tag": "0000_violet_obadiah_stane",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1784000772955,
+      "tag": "0001_strange_kang",
+      "breakpoints": true
     }
   ]
 }

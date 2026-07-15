@@ -1,4 +1,4 @@
-export default function Loading() {
+export default function CatalogueLoading() {
   return (
     <main
       className="min-h-[calc(100svh-4.5rem)] animate-pulse bg-[#e8f7f1] px-4 py-8 font-jost sm:px-6 lg:px-8"

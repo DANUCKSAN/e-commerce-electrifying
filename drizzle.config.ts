@@ -2,30 +2,44 @@ import { config } from "dotenv";
 import { defineConfig } from "drizzle-kit";
 
 config({ path: ".env.local", quiet: true });
-config({ quiet: true });
 
-const databaseCommands = new Set(["migrate", "push", "pull", "studio"]);
-const requiresDatabase = process.argv.some((argument) =>
-  databaseCommands.has(argument),
-);
+const databaseUrl = process.env.DATABASE_URL;
 
-if (requiresDatabase && !process.env.DATABASE_URL) {
+if (!databaseUrl) {
+  throw new Error("DATABASE_URL is not set in .env.local.");
+}
+
+let parsedDatabaseUrl: URL;
+
+try {
+  parsedDatabaseUrl = new URL(databaseUrl);
+} catch {
+  throw new Error("DATABASE_URL in .env.local is not a valid URL.");
+}
+
+if (!new Set(["postgres:", "postgresql:"]).has(parsedDatabaseUrl.protocol)) {
+  throw new Error("DATABASE_URL must use the postgres or postgresql protocol.");
+}
+
+if (
+  parsedDatabaseUrl.hostname === "your-neon-host.neon.tech" ||
+  parsedDatabaseUrl.hostname.includes("placeholder")
+) {
   throw new Error(
-    "DATABASE_URL is required for Drizzle commands that connect to PostgreSQL.",
+    "DATABASE_URL still contains a placeholder. Copy a connection string from the Neon dashboard.",
   );
 }
 
-const databaseUrl =
-  process.env.DATABASE_URL ??
-  "postgresql://schema-generation:only@localhost:5432/placeholder";
-
 export default defineConfig({
-  dialect: "postgresql",
   schema: "./src/db/schema/index.ts",
   out: "./drizzle",
+  dialect: "postgresql",
   dbCredentials: {
     url: databaseUrl,
   },
-  strict: true,
-  verbose: true,
+  entities: {
+    roles: {
+      provider: "neon",
+    },
+  },
 });
