@@ -7,7 +7,6 @@ import {
   integer,
   jsonb,
   pgTable,
-  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -15,10 +14,8 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 
-import { mediaAssets, products } from "./catalog";
-import { orderItems, orders } from "./commerce";
+import { orders } from "./commerce";
 import { auditTimestamps, primaryId } from "./common";
-import { sellerOffers } from "./offers";
 import { user } from "./user";
 
 export const promotions = pgTable(
@@ -99,96 +96,5 @@ export const promotionRedemptions = pgTable(
     ),
     index("promotion_redemptions_user_idx").on(table.userId, table.redeemedAt),
     check("promotion_redemptions_amount_check", sql`${table.amountMinor} >= 0`),
-  ],
-);
-
-export const wishlists = pgTable(
-  "wishlists",
-  {
-    id: primaryId(),
-    userId: uuid("user_id")
-      .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
-    name: varchar("name", { length: 120 }).notNull().default("Saved products"),
-    isDefault: boolean("is_default").notNull().default(false),
-    ...auditTimestamps(),
-  },
-  (table) => [
-    index("wishlists_user_id_idx").on(table.userId),
-    uniqueIndex("wishlists_user_default_uidx")
-      .on(table.userId)
-      .where(sql`${table.isDefault} = true`),
-  ],
-);
-
-export const wishlistItems = pgTable(
-  "wishlist_items",
-  {
-    wishlistId: uuid("wishlist_id")
-      .notNull()
-      .references(() => wishlists.id, { onDelete: "cascade" }),
-    offerId: uuid("offer_id")
-      .notNull()
-      .references(() => sellerOffers.id, { onDelete: "cascade" }),
-    addedAt: timestamp("added_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  (table) => [primaryKey({ columns: [table.wishlistId, table.offerId] })],
-);
-
-export const productReviews = pgTable(
-  "product_reviews",
-  {
-    id: primaryId(),
-    productId: uuid("product_id")
-      .notNull()
-      .references(() => products.id, { onDelete: "restrict" }),
-    userId: uuid("user_id")
-      .notNull()
-      .references(() => user.id, { onDelete: "restrict" }),
-    orderItemId: uuid("order_item_id").references(() => orderItems.id, {
-      onDelete: "restrict",
-    }),
-    rating: integer("rating").notNull(),
-    title: varchar("title", { length: 180 }),
-    body: text("body").notNull(),
-    status: varchar("status", { length: 24 }).notNull().default("pending"),
-    isVerifiedPurchase: boolean("is_verified_purchase")
-      .notNull()
-      .default(false),
-    publishedAt: timestamp("published_at", { withTimezone: true }),
-    ...auditTimestamps(),
-  },
-  (table) => [
-    uniqueIndex("product_reviews_user_product_uidx").on(
-      table.userId,
-      table.productId,
-    ),
-    index("product_reviews_product_status_idx").on(
-      table.productId,
-      table.status,
-      table.publishedAt,
-    ),
-    check(
-      "product_reviews_rating_check",
-      sql`${table.rating} between 1 and 5`,
-    ),
-  ],
-);
-
-export const reviewMedia = pgTable(
-  "review_media",
-  {
-    productReviewId: uuid("product_review_id")
-      .notNull()
-      .references(() => productReviews.id, { onDelete: "cascade" }),
-    assetId: uuid("asset_id")
-      .notNull()
-      .references(() => mediaAssets.id, { onDelete: "restrict" }),
-    sortOrder: integer("sort_order").notNull().default(0),
-  },
-  (table) => [
-    primaryKey({ columns: [table.productReviewId, table.assetId] }),
   ],
 );

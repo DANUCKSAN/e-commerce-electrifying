@@ -18,8 +18,6 @@ import {
 import { productVariants } from "./catalog";
 import { auditTimestamps, primaryId } from "./common";
 import { guest } from "./guest";
-import { sellers } from "./marketplace";
-import { sellerOffers } from "./offers";
 import { user } from "./user";
 
 export const carts = pgTable(
@@ -66,9 +64,9 @@ export const cartItems = pgTable(
     cartId: uuid("cart_id")
       .notNull()
       .references(() => carts.id, { onDelete: "cascade" }),
-    offerId: uuid("offer_id")
+    variantId: uuid("variant_id")
       .notNull()
-      .references(() => sellerOffers.id, { onDelete: "restrict" }),
+      .references(() => productVariants.id, { onDelete: "restrict" }),
     quantity: integer("quantity").notNull(),
     addedUnitAmountMinor: bigint("added_unit_amount_minor", {
       mode: "number",
@@ -76,195 +74,15 @@ export const cartItems = pgTable(
     ...auditTimestamps(),
   },
   (table) => [
-    uniqueIndex("cart_items_cart_offer_uidx").on(table.cartId, table.offerId),
-    index("cart_items_offer_id_idx").on(table.offerId),
+    uniqueIndex("cart_items_cart_variant_uidx").on(
+      table.cartId,
+      table.variantId,
+    ),
+    index("cart_items_variant_id_idx").on(table.variantId),
     check("cart_items_quantity_check", sql`${table.quantity} > 0`),
     check(
       "cart_items_amount_check",
       sql`${table.addedUnitAmountMinor} >= 0`,
-    ),
-  ],
-);
-
-export const quoteRequests = pgTable(
-  "quote_requests",
-  {
-    id: primaryId(),
-    requestNumber: varchar("request_number", { length: 40 }).notNull(),
-    userId: uuid("user_id").references(() => user.id, {
-      onDelete: "set null",
-    }),
-    guestId: uuid("guest_id").references(() => guest.id, {
-      onDelete: "set null",
-    }),
-    cartId: uuid("cart_id").references(() => carts.id, {
-      onDelete: "set null",
-    }),
-    customerEmail: varchar("customer_email", { length: 320 }).notNull(),
-    projectType: varchar("project_type", { length: 40 }).notNull(),
-    status: varchar("status", { length: 24 }).notNull().default("submitted"),
-    siteAddressSnapshot: jsonb("site_address_snapshot")
-      .$type<Record<string, unknown>>()
-      .notNull(),
-    notes: text("notes"),
-    neededBy: timestamp("needed_by", { withTimezone: true }),
-    expiresAt: timestamp("expires_at", { withTimezone: true }),
-    ...auditTimestamps(),
-  },
-  (table) => [
-    uniqueIndex("quote_requests_number_uidx").on(table.requestNumber),
-    index("quote_requests_user_created_idx").on(
-      table.userId,
-      table.createdAt,
-    ),
-    index("quote_requests_status_created_idx").on(
-      table.status,
-      table.createdAt,
-    ),
-    check(
-      "quote_requests_owner_check",
-      sql`num_nonnulls(${table.userId}, ${table.guestId}) >= 1`,
-    ),
-    check(
-      "quote_requests_status_check",
-      sql`${table.status} in ('draft', 'submitted', 'reviewing', 'quoted', 'accepted', 'declined', 'expired', 'cancelled')`,
-    ),
-  ],
-);
-
-export const quoteRequestItems = pgTable(
-  "quote_request_items",
-  {
-    id: primaryId(),
-    quoteRequestId: uuid("quote_request_id")
-      .notNull()
-      .references(() => quoteRequests.id, { onDelete: "cascade" }),
-    variantId: uuid("variant_id")
-      .notNull()
-      .references(() => productVariants.id, { onDelete: "restrict" }),
-    preferredOfferId: uuid("preferred_offer_id").references(
-      () => sellerOffers.id,
-      { onDelete: "set null" },
-    ),
-    quantity: integer("quantity").notNull(),
-    requirements: jsonb("requirements")
-      .$type<Record<string, unknown>>()
-      .notNull()
-      .default({}),
-    notes: text("notes"),
-  },
-  (table) => [
-    index("quote_request_items_request_idx").on(table.quoteRequestId),
-    check("quote_request_items_quantity_check", sql`${table.quantity} > 0`),
-  ],
-);
-
-export const quotes = pgTable(
-  "quotes",
-  {
-    id: primaryId(),
-    quoteNumber: varchar("quote_number", { length: 40 }).notNull(),
-    quoteRequestId: uuid("quote_request_id")
-      .notNull()
-      .references(() => quoteRequests.id, { onDelete: "restrict" }),
-    sellerId: uuid("seller_id")
-      .notNull()
-      .references(() => sellers.id, { onDelete: "restrict" }),
-    revision: integer("revision").notNull().default(1),
-    status: varchar("status", { length: 24 }).notNull().default("draft"),
-    currency: varchar("currency", { length: 3 }).notNull().default("AUD"),
-    subtotalMinor: bigint("subtotal_minor", { mode: "number" }).notNull(),
-    discountMinor: bigint("discount_minor", { mode: "number" })
-      .notNull()
-      .default(0),
-    taxMinor: bigint("tax_minor", { mode: "number" }).notNull(),
-    totalMinor: bigint("total_minor", { mode: "number" }).notNull(),
-    terms: text("terms"),
-    validUntil: timestamp("valid_until", { withTimezone: true }).notNull(),
-    sentAt: timestamp("sent_at", { withTimezone: true }),
-    acceptedAt: timestamp("accepted_at", { withTimezone: true }),
-    rejectedAt: timestamp("rejected_at", { withTimezone: true }),
-    ...auditTimestamps(),
-  },
-  (table) => [
-    uniqueIndex("quotes_number_uidx").on(table.quoteNumber),
-    uniqueIndex("quotes_request_seller_revision_uidx").on(
-      table.quoteRequestId,
-      table.sellerId,
-      table.revision,
-    ),
-    index("quotes_seller_status_idx").on(table.sellerId, table.status),
-    check(
-      "quotes_status_check",
-      sql`${table.status} in ('draft', 'sent', 'accepted', 'rejected', 'expired', 'withdrawn')`,
-    ),
-    check(
-      "quotes_amounts_check",
-      sql`${table.subtotalMinor} >= 0 and ${table.discountMinor} >= 0
-        and ${table.taxMinor} >= 0 and ${table.totalMinor} >= 0`,
-    ),
-  ],
-);
-
-export const quoteItems = pgTable(
-  "quote_items",
-  {
-    id: primaryId(),
-    quoteId: uuid("quote_id")
-      .notNull()
-      .references(() => quotes.id, { onDelete: "cascade" }),
-    offerId: uuid("offer_id").references(() => sellerOffers.id, {
-      onDelete: "set null",
-    }),
-    variantId: uuid("variant_id").references(() => productVariants.id, {
-      onDelete: "set null",
-    }),
-    description: text("description").notNull(),
-    quantity: integer("quantity").notNull(),
-    unitPriceMinor: bigint("unit_price_minor", { mode: "number" }).notNull(),
-    discountMinor: bigint("discount_minor", { mode: "number" })
-      .notNull()
-      .default(0),
-    taxMinor: bigint("tax_minor", { mode: "number" }).notNull(),
-    lineTotalMinor: bigint("line_total_minor", { mode: "number" }).notNull(),
-    sortOrder: integer("sort_order").notNull().default(0),
-  },
-  (table) => [
-    index("quote_items_quote_sort_idx").on(table.quoteId, table.sortOrder),
-    check("quote_items_quantity_check", sql`${table.quantity} > 0`),
-    check(
-      "quote_items_amounts_check",
-      sql`${table.unitPriceMinor} >= 0 and ${table.discountMinor} >= 0
-        and ${table.taxMinor} >= 0 and ${table.lineTotalMinor} >= 0`,
-    ),
-  ],
-);
-
-export const quoteEvents = pgTable(
-  "quote_events",
-  {
-    id: primaryId(),
-    quoteRequestId: uuid("quote_request_id")
-      .notNull()
-      .references(() => quoteRequests.id, { onDelete: "cascade" }),
-    quoteId: uuid("quote_id").references(() => quotes.id, {
-      onDelete: "cascade",
-    }),
-    actorUserId: uuid("actor_user_id").references(() => user.id, {
-      onDelete: "set null",
-    }),
-    eventType: varchar("event_type", { length: 60 }).notNull(),
-    fromStatus: varchar("from_status", { length: 24 }),
-    toStatus: varchar("to_status", { length: 24 }),
-    note: text("note"),
-    occurredAt: timestamp("occurred_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  (table) => [
-    index("quote_events_request_time_idx").on(
-      table.quoteRequestId,
-      table.occurredAt,
     ),
   ],
 );
@@ -276,15 +94,13 @@ export const checkoutSessions = pgTable(
     cartId: uuid("cart_id")
       .notNull()
       .references(() => carts.id, { onDelete: "restrict" }),
-    quoteId: uuid("quote_id").references(() => quotes.id, {
-      onDelete: "restrict",
-    }),
     userId: uuid("user_id").references(() => user.id, {
       onDelete: "set null",
     }),
     guestId: uuid("guest_id").references(() => guest.id, {
       onDelete: "set null",
     }),
+    fulfillmentType: varchar("fulfillment_type", { length: 20 }).notNull(),
     status: varchar("status", { length: 24 }).notNull().default("open"),
     currency: varchar("currency", { length: 3 }).notNull().default("AUD"),
     idempotencyKey: varchar("idempotency_key", { length: 160 }).notNull(),
@@ -300,6 +116,10 @@ export const checkoutSessions = pgTable(
     check(
       "checkout_sessions_owner_check",
       sql`num_nonnulls(${table.userId}, ${table.guestId}) >= 1`,
+    ),
+    check(
+      "checkout_sessions_fulfillment_check",
+      sql`${table.fulfillmentType} in ('pickup', 'delivery')`,
     ),
     check(
       "checkout_sessions_status_check",
@@ -323,6 +143,7 @@ export const orders = pgTable(
       onDelete: "set null",
     }),
     customerEmail: varchar("customer_email", { length: 320 }).notNull(),
+    fulfillmentType: varchar("fulfillment_type", { length: 20 }).notNull(),
     status: varchar("status", { length: 32 })
       .notNull()
       .default("pending_payment"),
@@ -360,6 +181,10 @@ export const orders = pgTable(
         and ${table.totalMinor} >= 0`,
     ),
     check(
+      "orders_fulfillment_type_check",
+      sql`${table.fulfillmentType} in ('pickup', 'delivery')`,
+    ),
+    check(
       "orders_status_check",
       sql`${table.status} in ('pending_payment', 'confirmed', 'processing', 'partially_fulfilled', 'fulfilled', 'completed', 'cancelled')`,
     ),
@@ -369,74 +194,7 @@ export const orders = pgTable(
     ),
     check(
       "orders_fulfillment_status_check",
-      sql`${table.fulfillmentStatus} in ('unfulfilled', 'partially_fulfilled', 'fulfilled', 'returned')`,
-    ),
-  ],
-);
-
-export const sellerOrders = pgTable(
-  "seller_orders",
-  {
-    id: primaryId(),
-    orderId: uuid("order_id")
-      .notNull()
-      .references(() => orders.id, { onDelete: "restrict" }),
-    sellerId: uuid("seller_id")
-      .notNull()
-      .references(() => sellers.id, { onDelete: "restrict" }),
-    sellerOrderNumber: varchar("seller_order_number", { length: 48 }).notNull(),
-    status: varchar("status", { length: 32 })
-      .notNull()
-      .default("pending"),
-    fulfillmentStatus: varchar("fulfillment_status", { length: 32 })
-      .notNull()
-      .default("unfulfilled"),
-    currency: varchar("currency", { length: 3 }).notNull().default("AUD"),
-    subtotalMinor: bigint("subtotal_minor", { mode: "number" }).notNull(),
-    discountMinor: bigint("discount_minor", { mode: "number" })
-      .notNull()
-      .default(0),
-    shippingMinor: bigint("shipping_minor", { mode: "number" })
-      .notNull()
-      .default(0),
-    taxMinor: bigint("tax_minor", { mode: "number" }).notNull(),
-    totalMinor: bigint("total_minor", { mode: "number" }).notNull(),
-    commissionMinor: bigint("commission_minor", { mode: "number" })
-      .notNull()
-      .default(0),
-    payoutStatus: varchar("payout_status", { length: 24 })
-      .notNull()
-      .default("pending"),
-    ...auditTimestamps(),
-  },
-  (table) => [
-    uniqueIndex("seller_orders_number_uidx").on(table.sellerOrderNumber),
-    uniqueIndex("seller_orders_order_seller_uidx").on(
-      table.orderId,
-      table.sellerId,
-    ),
-    index("seller_orders_seller_status_idx").on(
-      table.sellerId,
-      table.status,
-      table.createdAt,
-    ),
-    check(
-      "seller_orders_status_check",
-      sql`${table.status} in ('pending', 'accepted', 'processing', 'partially_fulfilled', 'fulfilled', 'completed', 'cancelled')`,
-    ),
-    check(
-      "seller_orders_fulfillment_status_check",
-      sql`${table.fulfillmentStatus} in ('unfulfilled', 'partially_fulfilled', 'fulfilled', 'returned')`,
-    ),
-    check(
-      "seller_orders_payout_status_check",
-      sql`${table.payoutStatus} in ('pending', 'available', 'processing', 'paid', 'held', 'reversed')`,
-    ),
-    check(
-      "seller_orders_amounts_check",
-      sql`${table.subtotalMinor} >= 0 and ${table.discountMinor} >= 0
-        and ${table.shippingMinor} >= 0 and ${table.taxMinor} >= 0
-        and ${table.totalMinor} >= 0 and ${table.commissionMinor} >= 0`,
+      sql`${table.fulfillmentStatus} in ('unfulfilled', 'preparing', 'ready_for_pickup', 'partially_fulfilled', 'fulfilled', 'returned')`,
     ),
   ],
 );
@@ -470,7 +228,7 @@ export const orderAddresses = pgTable(
     ),
     check(
       "order_addresses_type_check",
-      sql`${table.addressType} in ('billing', 'shipping', 'site')`,
+      sql`${table.addressType} in ('billing', 'shipping')`,
     ),
   ],
 );
@@ -482,12 +240,6 @@ export const orderItems = pgTable(
     orderId: uuid("order_id")
       .notNull()
       .references(() => orders.id, { onDelete: "restrict" }),
-    sellerOrderId: uuid("seller_order_id")
-      .notNull()
-      .references(() => sellerOrders.id, { onDelete: "restrict" }),
-    offerId: uuid("offer_id").references(() => sellerOffers.id, {
-      onDelete: "set null",
-    }),
     variantId: uuid("variant_id").references(() => productVariants.id, {
       onDelete: "set null",
     }),
@@ -514,8 +266,7 @@ export const orderItems = pgTable(
   },
   (table) => [
     index("order_items_order_id_idx").on(table.orderId),
-    index("order_items_seller_order_idx").on(table.sellerOrderId),
-    index("order_items_offer_id_idx").on(table.offerId),
+    index("order_items_variant_id_idx").on(table.variantId),
     check("order_items_quantity_check", sql`${table.quantity} > 0`),
     check(
       "order_items_amounts_check",
@@ -582,9 +333,6 @@ export const orderStatusHistory = pgTable(
     orderId: uuid("order_id")
       .notNull()
       .references(() => orders.id, { onDelete: "restrict" }),
-    sellerOrderId: uuid("seller_order_id").references(() => sellerOrders.id, {
-      onDelete: "restrict",
-    }),
     actorUserId: uuid("actor_user_id").references(() => user.id, {
       onDelete: "set null",
     }),

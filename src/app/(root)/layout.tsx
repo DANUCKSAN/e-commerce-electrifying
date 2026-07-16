@@ -23,7 +23,11 @@ export default function StorefrontLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="h-full bg-light-200 antialiased">
+    <html
+      lang="en"
+      className="h-full bg-light-200 antialiased"
+      data-scroll-behavior="smooth"
+    >
       <body className="min-h-full overflow-x-clip bg-light-200 font-jost text-dark-900">
         <Navbar />
         {children}

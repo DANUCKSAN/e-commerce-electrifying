@@ -14,24 +14,23 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 
-import { orderItems, orders, refunds, sellerOrders } from "./commerce";
+import { orderItems, orders, refunds } from "./commerce";
 import { auditTimestamps, primaryId } from "./common";
 import { warehouses } from "./inventory";
-import { sellers } from "./marketplace";
 import { user } from "./user";
 
 export const shippingZones = pgTable(
   "shipping_zones",
   {
     id: primaryId(),
-    sellerId: uuid("seller_id").references(() => sellers.id, {
-      onDelete: "cascade",
-    }),
     name: varchar("name", { length: 160 }).notNull(),
     status: varchar("status", { length: 24 }).notNull().default("active"),
     ...auditTimestamps(),
   },
-  (table) => [index("shipping_zones_seller_status_idx").on(table.sellerId, table.status)],
+  (table) => [
+    uniqueIndex("shipping_zones_name_uidx").on(table.name),
+    index("shipping_zones_status_idx").on(table.status),
+  ],
 );
 
 export const shippingZoneRegions = pgTable(
@@ -53,10 +52,10 @@ export const shippingMethods = pgTable(
   "shipping_methods",
   {
     id: primaryId(),
-    sellerId: uuid("seller_id").references(() => sellers.id, {
-      onDelete: "cascade",
-    }),
     name: varchar("name", { length: 160 }).notNull(),
+    methodType: varchar("method_type", { length: 24 })
+      .notNull()
+      .default("carrier"),
     carrier: varchar("carrier", { length: 100 }),
     serviceCode: varchar("service_code", { length: 100 }),
     minDeliveryDays: integer("min_delivery_days"),
@@ -69,7 +68,12 @@ export const shippingMethods = pgTable(
     ...auditTimestamps(),
   },
   (table) => [
-    index("shipping_methods_seller_status_idx").on(table.sellerId, table.status),
+    uniqueIndex("shipping_methods_name_uidx").on(table.name),
+    index("shipping_methods_status_idx").on(table.status),
+    check(
+      "shipping_methods_type_check",
+      sql`${table.methodType} in ('carrier', 'local_delivery', 'freight')`,
+    ),
     check(
       "shipping_methods_delivery_check",
       sql`(${table.minDeliveryDays} is null or ${table.minDeliveryDays} >= 0)
@@ -117,12 +121,16 @@ export const shipments = pgTable(
   "shipments",
   {
     id: primaryId(),
-    sellerOrderId: uuid("seller_order_id")
+    orderId: uuid("order_id")
       .notNull()
-      .references(() => sellerOrders.id, { onDelete: "restrict" }),
+      .references(() => orders.id, { onDelete: "restrict" }),
     warehouseId: uuid("warehouse_id")
       .notNull()
       .references(() => warehouses.id, { onDelete: "restrict" }),
+    shippingMethodId: uuid("shipping_method_id").references(
+      () => shippingMethods.id,
+      { onDelete: "set null" },
+    ),
     shipmentNumber: varchar("shipment_number", { length: 48 }).notNull(),
     status: varchar("status", { length: 32 }).notNull().default("pending"),
     carrier: varchar("carrier", { length: 100 }),
@@ -138,7 +146,7 @@ export const shipments = pgTable(
     uniqueIndex("shipments_carrier_tracking_uidx")
       .on(table.carrier, table.trackingNumber)
       .where(sql`${table.trackingNumber} is not null`),
-    index("shipments_seller_order_idx").on(table.sellerOrderId, table.status),
+    index("shipments_order_idx").on(table.orderId, table.status),
     check(
       "shipments_status_check",
       sql`${table.status} in ('pending', 'packed', 'shipped', 'in_transit', 'delivered', 'failed', 'cancelled', 'returned')`,
@@ -191,6 +199,42 @@ export const trackingEvents = pgTable(
   ],
 );
 
+export const orderPickups = pgTable(
+  "order_pickups",
+  {
+    id: primaryId(),
+    orderId: uuid("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "restrict" }),
+    warehouseId: uuid("warehouse_id")
+      .notNull()
+      .references(() => warehouses.id, { onDelete: "restrict" }),
+    pickupNumber: varchar("pickup_number", { length: 48 }).notNull(),
+    status: varchar("status", { length: 24 })
+      .notNull()
+      .default("preparing"),
+    contactName: varchar("contact_name", { length: 180 }).notNull(),
+    contactPhoneE164: varchar("contact_phone_e164", { length: 20 }),
+    pickupCodeHash: varchar("pickup_code_hash", { length: 128 }).notNull(),
+    readyAt: timestamp("ready_at", { withTimezone: true }),
+    collectedAt: timestamp("collected_at", { withTimezone: true }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    ...auditTimestamps(),
+  },
+  (table) => [
+    uniqueIndex("order_pickups_order_uidx").on(table.orderId),
+    uniqueIndex("order_pickups_number_uidx").on(table.pickupNumber),
+    index("order_pickups_location_status_idx").on(
+      table.warehouseId,
+      table.status,
+    ),
+    check(
+      "order_pickups_status_check",
+      sql`${table.status} in ('preparing', 'ready', 'collected', 'expired', 'cancelled')`,
+    ),
+  ],
+);
+
 export const returns = pgTable(
   "returns",
   {
@@ -199,9 +243,6 @@ export const returns = pgTable(
     orderId: uuid("order_id")
       .notNull()
       .references(() => orders.id, { onDelete: "restrict" }),
-    sellerOrderId: uuid("seller_order_id")
-      .notNull()
-      .references(() => sellerOrders.id, { onDelete: "restrict" }),
     refundId: uuid("refund_id").references(() => refunds.id, {
       onDelete: "set null",
     }),
@@ -220,8 +261,7 @@ export const returns = pgTable(
   },
   (table) => [
     uniqueIndex("returns_number_uidx").on(table.returnNumber),
-    index("returns_order_id_idx").on(table.orderId),
-    index("returns_seller_status_idx").on(table.sellerOrderId, table.status),
+    index("returns_order_status_idx").on(table.orderId, table.status),
     check(
       "returns_status_check",
       sql`${table.status} in ('requested', 'approved', 'rejected', 'in_transit', 'received', 'inspected', 'completed', 'cancelled')`,

@@ -220,6 +220,15 @@ export const productVariants = pgTable(
     gtin: varchar("gtin", { length: 14 }),
     status: varchar("status", { length: 24 }).notNull().default("draft"),
     isDefault: boolean("is_default").notNull().default(false),
+    minimumOrderQuantity: integer("minimum_order_quantity")
+      .notNull()
+      .default(1),
+    maximumOrderQuantity: integer("maximum_order_quantity"),
+    leadTimeDays: integer("lead_time_days").notNull().default(0),
+    trackInventory: boolean("track_inventory").notNull().default(true),
+    backorderPolicy: varchar("backorder_policy", { length: 24 })
+      .notNull()
+      .default("deny"),
     weightG: integer("weight_g"),
     lengthMm: integer("length_mm"),
     widthMm: integer("width_mm"),
@@ -260,6 +269,19 @@ export const productVariants = pgTable(
         and (${table.widthMm} is null or ${table.widthMm} >= 0)
         and (${table.heightMm} is null or ${table.heightMm} >= 0)`,
     ),
+    check(
+      "product_variants_order_quantity_check",
+      sql`${table.minimumOrderQuantity} > 0
+        and (${table.maximumOrderQuantity} is null or ${table.maximumOrderQuantity} >= ${table.minimumOrderQuantity})`,
+    ),
+    check(
+      "product_variants_backorder_check",
+      sql`${table.backorderPolicy} in ('deny', 'allow', 'preorder')`,
+    ),
+    check(
+      "product_variants_lead_time_check",
+      sql`${table.leadTimeDays} >= 0`,
+    ),
   ],
 );
 
@@ -288,30 +310,11 @@ export const attributeDefinitions = pgTable(
     uniqueIndex("attribute_definitions_code_uidx").on(table.code),
     check(
       "attribute_definitions_type_check",
-      sql`${table.dataType} in ('text', 'number', 'boolean', 'option')`,
+      sql`${table.dataType} in ('text', 'number', 'boolean')`,
     ),
     check(
       "attribute_definitions_scope_check",
       sql`${table.scope} in ('product', 'variant')`,
-    ),
-  ],
-);
-
-export const attributeOptions = pgTable(
-  "attribute_options",
-  {
-    id: primaryId(),
-    attributeId: uuid("attribute_id")
-      .notNull()
-      .references(() => attributeDefinitions.id, { onDelete: "cascade" }),
-    value: varchar("value", { length: 120 }).notNull(),
-    label: varchar("label", { length: 160 }).notNull(),
-    sortOrder: integer("sort_order").notNull().default(0),
-  },
-  (table) => [
-    uniqueIndex("attribute_options_value_uidx").on(
-      table.attributeId,
-      table.value,
     ),
   ],
 );
@@ -335,39 +338,6 @@ export const categoryAttributes = pgTable(
   ],
 );
 
-export const productAttributeValues = pgTable(
-  "product_attribute_values",
-  {
-    productId: uuid("product_id")
-      .notNull()
-      .references(() => products.id, { onDelete: "cascade" }),
-    attributeId: uuid("attribute_id")
-      .notNull()
-      .references(() => attributeDefinitions.id, { onDelete: "restrict" }),
-    valueText: text("value_text"),
-    valueNumber: numeric("value_number", { precision: 24, scale: 6 }),
-    valueBoolean: boolean("value_boolean"),
-    optionId: uuid("option_id").references(() => attributeOptions.id, {
-      onDelete: "restrict",
-    }),
-    unitCode: varchar("unit_code", { length: 16 }).references(
-      () => measurementUnits.code,
-      { onDelete: "restrict" },
-    ),
-  },
-  (table) => [
-    primaryKey({ columns: [table.productId, table.attributeId] }),
-    index("product_attribute_values_attribute_idx").on(
-      table.attributeId,
-      table.valueNumber,
-    ),
-    check(
-      "product_attribute_values_one_value_check",
-      sql`num_nonnulls(${table.valueText}, ${table.valueNumber}, ${table.valueBoolean}, ${table.optionId}) = 1`,
-    ),
-  ],
-);
-
 export const variantAttributeValues = pgTable(
   "variant_attribute_values",
   {
@@ -380,9 +350,6 @@ export const variantAttributeValues = pgTable(
     valueText: text("value_text"),
     valueNumber: numeric("value_number", { precision: 24, scale: 6 }),
     valueBoolean: boolean("value_boolean"),
-    optionId: uuid("option_id").references(() => attributeOptions.id, {
-      onDelete: "restrict",
-    }),
     unitCode: varchar("unit_code", { length: 16 }).references(
       () => measurementUnits.code,
       { onDelete: "restrict" },
@@ -396,7 +363,7 @@ export const variantAttributeValues = pgTable(
     ),
     check(
       "variant_attribute_values_one_value_check",
-      sql`num_nonnulls(${table.valueText}, ${table.valueNumber}, ${table.valueBoolean}, ${table.optionId}) = 1`,
+      sql`num_nonnulls(${table.valueText}, ${table.valueNumber}, ${table.valueBoolean}) = 1`,
     ),
   ],
 );
@@ -484,53 +451,6 @@ export const productCertifications = pgTable(
     uniqueIndex("product_certifications_number_uidx")
       .on(table.scheme, table.certificateNumber)
       .where(sql`${table.certificateNumber} is not null`),
-  ],
-);
-
-export const productRelations = pgTable(
-  "product_relations",
-  {
-    productId: uuid("product_id")
-      .notNull()
-      .references(() => products.id, { onDelete: "cascade" }),
-    relatedProductId: uuid("related_product_id")
-      .notNull()
-      .references(() => products.id, { onDelete: "cascade" }),
-    relationType: varchar("relation_type", { length: 32 }).notNull(),
-    sortOrder: integer("sort_order").notNull().default(0),
-  },
-  (table) => [
-    primaryKey({
-      columns: [table.productId, table.relatedProductId, table.relationType],
-    }),
-    check(
-      "product_relations_distinct_check",
-      sql`${table.productId} <> ${table.relatedProductId}`,
-    ),
-  ],
-);
-
-export const bundleComponents = pgTable(
-  "bundle_components",
-  {
-    bundleVariantId: uuid("bundle_variant_id")
-      .notNull()
-      .references(() => productVariants.id, { onDelete: "cascade" }),
-    componentVariantId: uuid("component_variant_id")
-      .notNull()
-      .references(() => productVariants.id, { onDelete: "restrict" }),
-    quantity: integer("quantity").notNull().default(1),
-    isOptional: boolean("is_optional").notNull().default(false),
-  },
-  (table) => [
-    primaryKey({
-      columns: [table.bundleVariantId, table.componentVariantId],
-    }),
-    check("bundle_components_quantity_check", sql`${table.quantity} > 0`),
-    check(
-      "bundle_components_distinct_check",
-      sql`${table.bundleVariantId} <> ${table.componentVariantId}`,
-    ),
   ],
 );
 

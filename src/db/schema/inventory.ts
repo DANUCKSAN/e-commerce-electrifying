@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   check,
   index,
   integer,
@@ -12,21 +13,22 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 
+import { productVariants } from "./catalog";
 import { checkoutSessions, orderItems } from "./commerce";
 import { auditTimestamps, primaryId } from "./common";
-import { sellers } from "./marketplace";
-import { sellerOffers } from "./offers";
 import { user } from "./user";
 
 export const warehouses = pgTable(
   "warehouses",
   {
     id: primaryId(),
-    sellerId: uuid("seller_id")
-      .notNull()
-      .references(() => sellers.id, { onDelete: "restrict" }),
     code: varchar("code", { length: 40 }).notNull(),
     name: varchar("name", { length: 160 }).notNull(),
+    locationType: varchar("location_type", { length: 24 })
+      .notNull()
+      .default("office"),
+    pickupEnabled: boolean("pickup_enabled").notNull().default(true),
+    deliveryEnabled: boolean("delivery_enabled").notNull().default(true),
     addressLine1: varchar("address_line_1", { length: 200 }).notNull(),
     addressLine2: varchar("address_line_2", { length: 200 }),
     suburb: varchar("suburb", { length: 120 }).notNull(),
@@ -42,8 +44,12 @@ export const warehouses = pgTable(
     ...auditTimestamps(),
   },
   (table) => [
-    uniqueIndex("warehouses_seller_code_uidx").on(table.sellerId, table.code),
-    index("warehouses_seller_status_idx").on(table.sellerId, table.status),
+    uniqueIndex("warehouses_code_uidx").on(table.code),
+    index("warehouses_status_idx").on(table.status),
+    check(
+      "warehouses_location_type_check",
+      sql`${table.locationType} in ('office', 'warehouse')`,
+    ),
     check(
       "warehouses_status_check",
       sql`${table.status} in ('active', 'inactive', 'closed')`,
@@ -57,9 +63,9 @@ export const inventoryLevels = pgTable(
     warehouseId: uuid("warehouse_id")
       .notNull()
       .references(() => warehouses.id, { onDelete: "restrict" }),
-    offerId: uuid("offer_id")
+    variantId: uuid("variant_id")
       .notNull()
-      .references(() => sellerOffers.id, { onDelete: "restrict" }),
+      .references(() => productVariants.id, { onDelete: "restrict" }),
     onHand: integer("on_hand").notNull().default(0),
     reserved: integer("reserved").notNull().default(0),
     incoming: integer("incoming").notNull().default(0),
@@ -71,8 +77,8 @@ export const inventoryLevels = pgTable(
       .$onUpdate(() => new Date()),
   },
   (table) => [
-    primaryKey({ columns: [table.warehouseId, table.offerId] }),
-    index("inventory_levels_offer_id_idx").on(table.offerId),
+    primaryKey({ columns: [table.warehouseId, table.variantId] }),
+    index("inventory_levels_variant_id_idx").on(table.variantId),
     check(
       "inventory_levels_nonnegative_check",
       sql`${table.onHand} >= 0 and ${table.reserved} >= 0
@@ -92,9 +98,9 @@ export const inventoryReservations = pgTable(
     warehouseId: uuid("warehouse_id")
       .notNull()
       .references(() => warehouses.id, { onDelete: "restrict" }),
-    offerId: uuid("offer_id")
+    variantId: uuid("variant_id")
       .notNull()
-      .references(() => sellerOffers.id, { onDelete: "restrict" }),
+      .references(() => productVariants.id, { onDelete: "restrict" }),
     checkoutSessionId: uuid("checkout_session_id")
       .notNull()
       .references(() => checkoutSessions.id, { onDelete: "restrict" }),
@@ -116,7 +122,7 @@ export const inventoryReservations = pgTable(
     ),
     index("inventory_reservations_level_idx").on(
       table.warehouseId,
-      table.offerId,
+      table.variantId,
       table.status,
     ),
     check("inventory_reservations_quantity_check", sql`${table.quantity} > 0`),
@@ -134,9 +140,9 @@ export const inventoryMovements = pgTable(
     warehouseId: uuid("warehouse_id")
       .notNull()
       .references(() => warehouses.id, { onDelete: "restrict" }),
-    offerId: uuid("offer_id")
+    variantId: uuid("variant_id")
       .notNull()
-      .references(() => sellerOffers.id, { onDelete: "restrict" }),
+      .references(() => productVariants.id, { onDelete: "restrict" }),
     movementType: varchar("movement_type", { length: 32 }).notNull(),
     quantityDelta: integer("quantity_delta").notNull(),
     balanceAfter: integer("balance_after").notNull(),
@@ -160,7 +166,7 @@ export const inventoryMovements = pgTable(
   (table) => [
     index("inventory_movements_level_time_idx").on(
       table.warehouseId,
-      table.offerId,
+      table.variantId,
       table.occurredAt,
     ),
     index("inventory_movements_reference_idx").on(
@@ -170,7 +176,7 @@ export const inventoryMovements = pgTable(
     uniqueIndex("inventory_movements_reference_uidx")
       .on(
         table.warehouseId,
-        table.offerId,
+        table.variantId,
         table.movementType,
         table.referenceType,
         table.referenceId,
@@ -191,9 +197,9 @@ export const inventorySerials = pgTable(
   "inventory_serials",
   {
     id: primaryId(),
-    offerId: uuid("offer_id")
+    variantId: uuid("variant_id")
       .notNull()
-      .references(() => sellerOffers.id, { onDelete: "restrict" }),
+      .references(() => productVariants.id, { onDelete: "restrict" }),
     warehouseId: uuid("warehouse_id")
       .notNull()
       .references(() => warehouses.id, { onDelete: "restrict" }),
@@ -207,8 +213,8 @@ export const inventorySerials = pgTable(
     ...auditTimestamps(),
   },
   (table) => [
-    uniqueIndex("inventory_serials_offer_serial_uidx").on(
-      table.offerId,
+    uniqueIndex("inventory_serials_variant_serial_uidx").on(
+      table.variantId,
       table.serialNumber,
     ),
     index("inventory_serials_warehouse_status_idx").on(

@@ -2,27 +2,27 @@ import { relations } from "drizzle-orm";
 
 import { account } from "./account";
 import { brands, products, productVariants } from "./catalog";
-import { carts, orderItems, orders, sellerOrders } from "./commerce";
-import { inventoryLevels, warehouses } from "./inventory";
-import { customerProfiles, sellers } from "./marketplace";
-import { offerPrices, sellerOffers } from "./offers";
+import { carts, orderItems, orders } from "./commerce";
+import { customerProfiles } from "./customers";
+import { inventoryLevels } from "./inventory";
+import { productPrices } from "./pricing";
 import { session } from "./session";
 import { user } from "./user";
 
 export * from "./account";
 export * from "./catalog";
 export * from "./commerce";
+export * from "./customers";
 export * from "./fulfillment";
 export * from "./guest";
 export * from "./inventory";
 export * from "./marketing";
-export * from "./marketplace";
-export * from "./offers";
 export * from "./operations";
+export * from "./pricing";
 export * from "./session";
-export * from "./services";
 export * from "./user";
 export * from "./verification";
+export * from "./warranty";
 
 export const userRelations = relations(user, ({ many, one }) => ({
   accounts: many(account),
@@ -70,33 +70,11 @@ export const productVariantRelations = relations(
       fields: [productVariants.productId],
       references: [products.id],
     }),
-    offers: many(sellerOffers),
-  }),
-);
-
-export const sellerRelations = relations(sellers, ({ many }) => ({
-  offers: many(sellerOffers),
-  warehouses: many(warehouses),
-  sellerOrders: many(sellerOrders),
-}));
-
-export const sellerOfferRelations = relations(
-  sellerOffers,
-  ({ many, one }) => ({
-    seller: one(sellers, {
-      fields: [sellerOffers.sellerId],
-      references: [sellers.id],
-    }),
-    variant: one(productVariants, {
-      fields: [sellerOffers.variantId],
-      references: [productVariants.id],
-    }),
-    prices: many(offerPrices),
+    prices: many(productPrices),
     inventoryLevels: many(inventoryLevels),
   }),
 );
 
 export const orderRelations = relations(orders, ({ many }) => ({
-  sellerOrders: many(sellerOrders),
   items: many(orderItems),
 }));

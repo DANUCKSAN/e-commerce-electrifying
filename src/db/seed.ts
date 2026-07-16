@@ -143,7 +143,7 @@ async function seed() {
     .values({
       code: "standard-gst",
       name: "Standard GST",
-      description: "Standard Australian taxable goods. Demo configuration.",
+      description: "Standard Australian taxable goods.",
     })
     .onConflictDoUpdate({
       target: schema.taxClasses.code,
@@ -278,7 +278,7 @@ async function seed() {
   }
 
   for (const role of [
-    ["platform_admin", "Platform administrator"],
+    ["store_admin", "Store administrator"],
     ["support", "Customer support"],
     ["catalogue_manager", "Catalogue manager"],
     ["finance", "Finance manager"],
@@ -292,35 +292,14 @@ async function seed() {
       });
   }
 
-  const [seller] = await db
-    .insert(schema.sellers)
-    .values({
-      sellerNumber: "PVTOEV-DEMO",
-      slug: "pvtoev",
-      legalName: "Electrifying Australia — Demo Seller",
-      tradingName: "PVtoEV",
-      gstRegistered: false,
-      status: "active",
-      supportEmail: "support@pvtoev.example.invalid",
-      defaultCurrency: "AUD",
-      approvedAt: publishedAt,
-    })
-    .onConflictDoUpdate({
-      target: schema.sellers.sellerNumber,
-      set: {
-        tradingName: "PVtoEV",
-        status: "active",
-        supportEmail: "support@pvtoev.example.invalid",
-      },
-    })
-    .returning({ id: schema.sellers.id });
-
   const [warehouse] = await db
     .insert(schema.warehouses)
     .values({
-      sellerId: seller.id,
-      code: "DEMO-SYD",
-      name: "Sydney Demo Warehouse",
+      code: "SYD-OFFICE",
+      name: "Sydney office",
+      locationType: "office",
+      pickupEnabled: true,
+      deliveryEnabled: true,
       addressLine1: "1 Demo Street",
       suburb: "Sydney",
       state: "NSW",
@@ -330,8 +309,14 @@ async function seed() {
       status: "active",
     })
     .onConflictDoUpdate({
-      target: [schema.warehouses.sellerId, schema.warehouses.code],
-      set: { name: "Sydney Demo Warehouse", status: "active" },
+      target: schema.warehouses.code,
+      set: {
+        name: "Sydney office",
+        locationType: "office",
+        pickupEnabled: true,
+        deliveryEnabled: true,
+        status: "active",
+      },
     })
     .returning({ id: schema.warehouses.id });
 
@@ -430,36 +415,10 @@ async function seed() {
         });
     }
 
-    const [offer] = await db
-      .insert(schema.sellerOffers)
-      .values({
-        sellerId: seller.id,
-        variantId: variant.id,
-        sellerSku: demo.variant.sellerSku,
-        status: "active",
-        condition: "new",
-        fulfillmentType: "platform",
-        trackInventory: true,
-        backorderPolicy: "deny",
-        publishedAt,
-      })
-      .onConflictDoUpdate({
-        target: [schema.sellerOffers.sellerId, schema.sellerOffers.sellerSku],
-        set: {
-          variantId: variant.id,
-          status: "active",
-          condition: "new",
-          fulfillmentType: "platform",
-          trackInventory: true,
-          backorderPolicy: "deny",
-        },
-      })
-      .returning({ id: schema.sellerOffers.id });
-
     await db
-      .insert(schema.offerPrices)
+      .insert(schema.productPrices)
       .values({
-        offerId: offer.id,
+        variantId: variant.id,
         priceType: "regular",
         amountMinor: demo.priceCents,
         currency: "AUD",
@@ -468,10 +427,10 @@ async function seed() {
       })
       .onConflictDoUpdate({
         target: [
-          schema.offerPrices.offerId,
-          schema.offerPrices.priceType,
-          schema.offerPrices.currency,
-          schema.offerPrices.startsAt,
+          schema.productPrices.variantId,
+          schema.productPrices.priceType,
+          schema.productPrices.currency,
+          schema.productPrices.startsAt,
         ],
         set: { amountMinor: demo.priceCents, taxInclusive: true },
       });
@@ -480,7 +439,7 @@ async function seed() {
       .insert(schema.inventoryLevels)
       .values({
         warehouseId: warehouse.id,
-        offerId: offer.id,
+        variantId: variant.id,
         onHand: demo.stock,
         reserved: 0,
         incoming: 0,
@@ -489,7 +448,7 @@ async function seed() {
       .onConflictDoUpdate({
         target: [
           schema.inventoryLevels.warehouseId,
-          schema.inventoryLevels.offerId,
+          schema.inventoryLevels.variantId,
         ],
         set: { onHand: demo.stock, reserved: 0 },
       });
@@ -498,7 +457,7 @@ async function seed() {
       .insert(schema.inventoryMovements)
       .values({
         warehouseId: warehouse.id,
-        offerId: offer.id,
+        variantId: variant.id,
         movementType: "receipt",
         quantityDelta: demo.stock,
         balanceAfter: demo.stock,

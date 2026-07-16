@@ -8,11 +8,10 @@ import {
   brands,
   categories,
   inventoryLevels,
-  offerPrices,
   productCategories,
+  productPrices,
   products,
   productVariants,
-  sellerOffers,
 } from "@/db/schema";
 
 export type CatalogueProduct = {
@@ -45,7 +44,7 @@ export async function getCatalogue(): Promise<CatalogueProduct[]> {
       categorySlug: categories.slug,
       manufacturer: brands.name,
       specification: sql<string>`coalesce(${productVariants.specificationSummary}, ${productVariants.name})`,
-      priceCents: offerPrices.amountMinor,
+      priceCents: productPrices.amountMinor,
       stock:
         sql<number>`coalesce(sum(greatest(${inventoryLevels.onHand} - ${inventoryLevels.reserved} - ${inventoryLevels.safetyStock}, 0)), 0)::int`.mapWith(
           Number,
@@ -72,24 +71,16 @@ export async function getCatalogue(): Promise<CatalogueProduct[]> {
       ),
     )
     .innerJoin(
-      sellerOffers,
+      productPrices,
       and(
-        eq(sellerOffers.variantId, productVariants.id),
-        eq(sellerOffers.status, "active"),
-        isNull(sellerOffers.deletedAt),
+        eq(productPrices.variantId, productVariants.id),
+        eq(productPrices.priceType, "regular"),
+        eq(productPrices.currency, "AUD"),
+        lte(productPrices.startsAt, sql`now()`),
+        or(isNull(productPrices.endsAt), gt(productPrices.endsAt, sql`now()`)),
       ),
     )
-    .innerJoin(
-      offerPrices,
-      and(
-        eq(offerPrices.offerId, sellerOffers.id),
-        eq(offerPrices.priceType, "regular"),
-        eq(offerPrices.currency, "AUD"),
-        lte(offerPrices.startsAt, sql`now()`),
-        or(isNull(offerPrices.endsAt), gt(offerPrices.endsAt, sql`now()`)),
-      ),
-    )
-    .leftJoin(inventoryLevels, eq(inventoryLevels.offerId, sellerOffers.id))
+    .leftJoin(inventoryLevels, eq(inventoryLevels.variantId, productVariants.id))
     .where(
       and(
         eq(products.status, "active"),
@@ -103,7 +94,7 @@ export async function getCatalogue(): Promise<CatalogueProduct[]> {
       categories.id,
       brands.id,
       productVariants.id,
-      offerPrices.id,
+      productPrices.id,
     )
     .orderBy(
       desc(products.featured),
