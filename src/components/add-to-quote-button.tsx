@@ -5,7 +5,7 @@ import { useCartStore } from "./cart-provider";
 type AddToQuoteButtonProps = {
   disabled?: boolean;
   product: {
-    id: number;
+    id: string;
     name: string;
     priceCents: number;
   };

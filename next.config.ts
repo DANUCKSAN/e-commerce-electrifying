@@ -58,6 +58,12 @@ const nextConfig: NextConfig = {
         pathname: "/youtube/ffffff",
       },
       {
+         protocol: "https",
+          hostname: "images.unsplash.com",
+  port: "",
+  pathname: "/photo-1523987355523-c7b5b0dd90a7",
+},
+      {
         protocol: "https",
         hostname: "cdn.jsdelivr.net",
         port: "",

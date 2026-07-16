@@ -1,7 +1,7 @@
 import { createStore } from "zustand/vanilla";
 
 export type QuoteProduct = {
-  id: number;
+  id: string;
   name: string;
   priceCents: number;
 };
@@ -11,7 +11,7 @@ type QuoteLine = QuoteProduct & {
 };
 
 export type CartState = {
-  items: Record<number, QuoteLine>;
+  items: Record<string, QuoteLine>;
 };
 
 export type CartActions = {

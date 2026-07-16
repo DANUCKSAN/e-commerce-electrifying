@@ -1,4 +1,4 @@
-import { asc, desc } from "drizzle-orm";
+import { and, asc, desc, eq, gt, isNull, lte, or, sql } from "drizzle-orm";
 import {
   ArrowRight,
   ArrowUpRight,
@@ -15,7 +15,16 @@ import BatteryHero from "@/components/BatteryHero";
 import Card, { type CardBadgeTone } from "@/components/Card";
 import { db, isDatabaseConfigured } from "@/db";
 import { sampleProducts } from "@/db/sample-products";
-import { products } from "@/db/schema";
+import {
+  brands,
+  categories,
+  inventoryLevels,
+  offerPrices,
+  productCategories,
+  products,
+  productVariants,
+  sellerOffers,
+} from "@/db/schema";
 
 export const dynamic = "force-dynamic";
 
@@ -37,33 +46,45 @@ type ProductImage = {
 };
 
 const productImages: Record<string, ProductImage> = {
-  "heliomax-450w-solar-panel": {
+  "demo-aiko-450w-solar-panel": {
     src: "https://images.unsplash.com/photo-1509391366360-2e959784a276?auto=format&fit=crop&w=1400&q=82",
     alt: "Rows of blue solar panels catching sunlight",
   },
-  "voltstream-10kw-hybrid-inverter": {
+  "demo-jinko-440w-solar-panel": {
     src: "https://images.unsplash.com/photo-1521618755572-156ae0cdd74d?auto=format&fit=crop&w=1400&q=82",
     alt: "Close view of a modern solar energy installation",
   },
-  "terravault-13-battery": {
+  "demo-yingli-430w-solar-panel": {
+    src: "https://images.unsplash.com/photo-1624397640148-949b1732bb0a?auto=format&fit=crop&w=1400&q=82",
+    alt: "Solar panels installed across a residential rooftop",
+  },
+  "demo-anker-solix-2kwh-battery-module": {
     src: "https://images.unsplash.com/photo-1780445392417-68b9dccc45f2?auto=format&fit=crop&w=1400&q=82",
     alt: "Wall-mounted home solar battery and energy storage system",
   },
-  "driveray-22kw-ev-charger": {
+  "demo-bluetti-1500wh-portable-battery": {
+    src: "https://images.unsplash.com/photo-1780445392417-68b9dccc45f2?auto=format&fit=crop&w=1400&q=82",
+    alt: "Modern battery energy storage equipment",
+  },
+  "demo-tesla-wall-ev-charger": {
     src: "https://images.unsplash.com/photo-1593941707874-ef25b8b4a92b?auto=format&fit=crop&w=1400&q=82",
     alt: "Electric vehicle connected to a charging cable",
   },
-  "sunguide-roof-rail-kit": {
-    src: "https://images.unsplash.com/photo-1624397640148-949b1732bb0a?auto=format&fit=crop&w=1400&q=82",
-    alt: "Solar installer securing panels on a residential roof",
+  "demo-goodwe-22kw-ev-charger": {
+    src: "https://images.unsplash.com/photo-1593941707874-ef25b8b4a92b?auto=format&fit=crop&w=1400&q=82",
+    alt: "Electric vehicle charging beside a building",
   },
-  "gridguard-smart-meter": {
-    src: "https://images.unsplash.com/photo-1527332756452-1ebef4a55fb1?auto=format&fit=crop&w=1400&q=82",
-    alt: "Close view of household energy monitoring equipment",
+  "demo-sungrow-11kw-ev-charger": {
+    src: "https://images.unsplash.com/photo-1593941707874-ef25b8b4a92b?auto=format&fit=crop&w=1400&q=82",
+    alt: "Electric vehicle connected to a charging point",
+  },
+  "demo-anker-solix-40l-portable-cooler": {
+    src: "https://images.unsplash.com/photo-1523987355523-c7b5b0dd90a7?auto=format&fit=crop&w=1400&q=82",
+    alt: "Portable camping equipment set up outdoors",
   },
 };
 
-const fallbackImage = productImages["heliomax-450w-solar-panel"];
+const fallbackImage = productImages["demo-aiko-450w-solar-panel"];
 
 const money = new Intl.NumberFormat("en-AU", {
   style: "currency",
@@ -102,15 +123,66 @@ async function getCatalogue(): Promise<CatalogueProduct[]> {
       .select({
         slug: products.slug,
         name: products.name,
-        description: products.description,
-        category: products.category,
-        manufacturer: products.manufacturer,
-        specification: products.specification,
-        priceCents: products.priceCents,
-        stock: products.stock,
+        description: products.shortDescription,
+        category: categories.name,
+        manufacturer: brands.name,
+        specification: sql<string>`coalesce(${productVariants.specificationSummary}, ${productVariants.name})`,
+        priceCents: offerPrices.amountMinor,
+        stock:
+          sql<number>`coalesce(sum(greatest(${inventoryLevels.onHand} - ${inventoryLevels.reserved} - ${inventoryLevels.safetyStock}, 0)), 0)::int`.mapWith(
+            Number,
+          ),
         featured: products.featured,
       })
       .from(products)
+      .innerJoin(brands, eq(products.brandId, brands.id))
+      .innerJoin(
+        productCategories,
+        and(
+          eq(productCategories.productId, products.id),
+          eq(productCategories.isPrimary, true),
+        ),
+      )
+      .innerJoin(categories, eq(productCategories.categoryId, categories.id))
+      .innerJoin(
+        productVariants,
+        and(
+          eq(productVariants.productId, products.id),
+          eq(productVariants.isDefault, true),
+          eq(productVariants.status, "active"),
+          isNull(productVariants.deletedAt),
+        ),
+      )
+      .innerJoin(
+        sellerOffers,
+        and(
+          eq(sellerOffers.variantId, productVariants.id),
+          eq(sellerOffers.status, "active"),
+          isNull(sellerOffers.deletedAt),
+        ),
+      )
+      .innerJoin(
+        offerPrices,
+        and(
+          eq(offerPrices.offerId, sellerOffers.id),
+          eq(offerPrices.priceType, "regular"),
+          eq(offerPrices.currency, "AUD"),
+          lte(offerPrices.startsAt, sql`now()`),
+          or(isNull(offerPrices.endsAt), gt(offerPrices.endsAt, sql`now()`)),
+        ),
+      )
+      .leftJoin(
+        inventoryLevels,
+        eq(inventoryLevels.offerId, sellerOffers.id),
+      )
+      .where(and(eq(products.status, "active"), isNull(products.deletedAt)))
+      .groupBy(
+        products.id,
+        categories.name,
+        brands.name,
+        productVariants.id,
+        offerPrices.id,
+      )
       .orderBy(desc(products.featured), asc(products.name))
       .limit(6);
 
@@ -174,16 +246,19 @@ export default async function StorefrontPage() {
             aria-label="Product categories"
             className="reveal-on-scroll mt-9 flex flex-wrap gap-2 sm:mt-12"
           >
-            {["Solar", "Storage", "Inverters", "EV charging", "Management"].map(
-              (category) => (
+            {[
+              "Solar panels",
+              "Portable batteries",
+              "EV chargers",
+              "Portable coolers",
+            ].map((category) => (
                 <li
                   key={category}
                   className="rounded-full border border-light-300 bg-light-200/70 px-4 py-2.5 text-caption text-dark-700"
                 >
                   {category}
                 </li>
-              ),
-            )}
+              ))}
           </ul>
 
           <div className="mt-8 grid gap-5 sm:grid-cols-2 sm:gap-6 lg:mt-10 lg:grid-cols-3 lg:gap-7">
