@@ -10,7 +10,7 @@ export const metadata: Metadata = {
     template: "%s | PVtoEV",
   },
   description:
-    "Discover connected solar panels, home batteries, inverters, energy management and EV charging for Australian homes.",
+    "Shop solar panels, energy storage, EV chargers and portable coolers from PVtoEV's focused renewable catalogue.",
 };
 
 export const viewport: Viewport = {

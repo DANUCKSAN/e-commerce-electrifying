@@ -1,20 +1,12 @@
 "use client";
 
-import {
-  ArrowUpRight,
-  Menu,
-  Search,
-  ShoppingBag,
-  SunMedium,
-  X,
-} from "lucide-react";
+import { ArrowUpRight, Menu, SunMedium, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
 
 export interface NavbarLink {
   label: string;
   href: string;
-  active?: boolean;
   external?: boolean;
 }
 
@@ -29,23 +21,16 @@ export interface NavbarProps {
   brandTagline?: string;
   links?: readonly NavbarLink[];
   action?: NavbarAction | null;
-  searchHref?: string;
-  cartHref?: string;
-  cartCount?: number;
   className?: string;
 }
 
 const defaultLinks: readonly NavbarLink[] = [
-  { label: "Home", href: "#top", active: true },
-  { label: "Products", href: "#products" },
-  { label: "Solutions", href: "#solutions" },
-  { label: "About", href: "#about" },
+  { label: "All products", href: "/#catalogue" },
+  { label: "Solar", href: "/?sector=solar#catalogue" },
+  { label: "Storage", href: "/?sector=storage#catalogue" },
+  { label: "EV chargers", href: "/?sector=charging#catalogue" },
+  { label: "Coolers", href: "/?sector=outdoors#catalogue" },
 ];
-
-const defaultAction: NavbarAction = {
-  label: "Get a quote",
-  href: "#contact",
-};
 
 const focusRing =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green focus-visible:ring-offset-2 focus-visible:ring-offset-light-100";
@@ -60,10 +45,7 @@ export function Navbar({
   brandName = "PVtoEV",
   brandTagline = "Renewable marketplace",
   links = defaultLinks,
-  action = defaultAction,
-  searchHref = "#search",
-  cartHref = "#quote",
-  cartCount = 0,
+  action = null,
   className = "",
 }: NavbarProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -75,7 +57,6 @@ export function Navbar({
 
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
-
       setIsOpen(false);
       menuButtonRef.current?.focus();
     };
@@ -94,12 +75,6 @@ export function Navbar({
     return () => desktopQuery.removeEventListener("change", closeAtDesktop);
   }, []);
 
-  const displayedCount = cartCount > 99 ? "99+" : Math.max(0, cartCount);
-  const cartLabel =
-    cartCount > 0
-      ? `View project quote, ${cartCount} ${cartCount === 1 ? "item" : "items"}`
-      : "View project quote";
-
   return (
     <header
       className={`sticky inset-x-0 top-0 z-50 w-full border-b border-light-300/80 bg-light-100/88 font-jost shadow-[0_8px_30px_rgba(17,17,17,0.045)] backdrop-blur-xl ${className}`}
@@ -117,7 +92,7 @@ export function Navbar({
           >
             <div className="flex min-w-0 flex-1 items-center">
               <Link
-                href="#top"
+                href="/"
                 aria-label={`${brandName} home`}
                 onClick={() => setIsOpen(false)}
                 className={`group flex min-w-0 items-center gap-2.5 rounded-xl ${focusRing}`}
@@ -141,18 +116,13 @@ export function Navbar({
               </Link>
             </div>
 
-            <ul className="hidden flex-1 items-center justify-center gap-1 lg:flex">
+            <ul className="hidden items-center justify-center gap-1 lg:flex">
               {links.map((item) => (
                 <li key={`${item.label}-${item.href}`}>
                   <Link
                     href={item.href}
-                    aria-current={item.active ? "page" : undefined}
                     {...externalLinkProps(item.external)}
-                    className={`inline-flex min-h-11 items-center rounded-full px-4 text-caption transition-[color,background-color,box-shadow,transform] duration-300 ease-out motion-reduce:transition-none ${focusRing} ${
-                      item.active
-                        ? "bg-gradient-to-r from-green to-teal-700 text-light-100 shadow-[0_8px_24px_rgba(0,125,72,0.22)]"
-                        : "text-dark-700 hover:-translate-y-0.5 hover:bg-light-200 hover:text-dark-900"
-                    }`}
+                    className={`inline-flex min-h-11 items-center rounded-full px-4 text-caption text-dark-700 transition-[color,background-color,transform] duration-300 ease-out hover:-translate-y-0.5 hover:bg-light-200 hover:text-dark-900 motion-reduce:transition-none ${focusRing}`}
                   >
                     {item.label}
                   </Link>
@@ -160,37 +130,12 @@ export function Navbar({
               ))}
             </ul>
 
-            <div className="flex flex-1 items-center justify-end gap-1.5 sm:gap-2">
-              <Link
-                href={searchHref}
-                aria-label="Search products"
-                className={`hidden size-11 items-center justify-center rounded-full border border-light-300 bg-light-100 text-dark-900 transition-[background-color,color,transform] duration-300 hover:-translate-y-0.5 hover:bg-light-200 sm:inline-flex ${focusRing}`}
-              >
-                <Search aria-hidden="true" className="size-[1.1rem]" strokeWidth={1.8} />
-              </Link>
-
-              <Link
-                href={cartHref}
-                aria-label={cartLabel}
-                className={`relative inline-flex size-11 items-center justify-center rounded-full border border-light-300 bg-light-100 text-dark-900 transition-[background-color,color,transform] duration-300 hover:-translate-y-0.5 hover:bg-light-200 ${focusRing}`}
-              >
-                <ShoppingBag
-                  aria-hidden="true"
-                  className="size-[1.1rem]"
-                  strokeWidth={1.8}
-                />
-                {cartCount > 0 ? (
-                  <span className="absolute -right-1 -top-1 flex min-h-5 min-w-5 items-center justify-center rounded-full bg-dark-900 px-1 text-[0.62rem] font-bold leading-none text-light-100 ring-2 ring-light-100">
-                    {displayedCount}
-                  </span>
-                ) : null}
-              </Link>
-
+            <div className="flex flex-1 items-center justify-end gap-2">
               {action ? (
                 <Link
                   href={action.href}
                   {...externalLinkProps(action.external)}
-                  className={`hidden min-h-11 items-center gap-2 rounded-full bg-dark-900 px-5 text-caption text-light-100 shadow-[0_10px_26px_rgba(17,17,17,0.16)] transition-[background-color,transform,box-shadow] duration-300 hover:-translate-y-0.5 hover:bg-green hover:shadow-[0_12px_30px_rgba(0,125,72,0.2)] xl:inline-flex ${focusRing}`}
+                  className={`hidden min-h-11 items-center gap-2 rounded-full bg-dark-900 px-5 text-caption text-light-100 transition-[background-color,transform] duration-300 hover:-translate-y-0.5 hover:bg-green xl:inline-flex ${focusRing}`}
                 >
                   {action.label}
                   <ArrowUpRight aria-hidden="true" className="size-4" strokeWidth={1.8} />
@@ -235,14 +180,9 @@ export function Navbar({
                     <li key={`mobile-${item.label}-${item.href}`}>
                       <Link
                         href={item.href}
-                        aria-current={item.active ? "page" : undefined}
                         {...externalLinkProps(item.external)}
                         onClick={() => setIsOpen(false)}
-                        className={`flex min-h-12 items-center justify-between rounded-2xl px-4 text-body-medium transition-colors duration-300 ${focusRing} ${
-                          item.active
-                            ? "bg-dark-900 text-light-100"
-                            : "text-dark-900 hover:bg-light-200"
-                        }`}
+                        className={`flex min-h-12 items-center justify-between rounded-2xl px-4 text-body-medium text-dark-900 transition-colors duration-300 hover:bg-light-200 ${focusRing}`}
                       >
                         <span>
                           <span className="mr-3 text-footnote tabular-nums text-dark-700">
@@ -260,43 +200,21 @@ export function Navbar({
                   ))}
                 </ul>
 
-                <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-[1fr_1fr_1.35fr]">
+                {action ? (
                   <Link
-                    href={searchHref}
+                    href={action.href}
+                    {...externalLinkProps(action.external)}
                     onClick={() => setIsOpen(false)}
-                    className={`inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-light-300 bg-light-100 text-caption text-dark-900 hover:bg-light-200 ${focusRing}`}
+                    className={`mt-3 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-green px-5 text-caption text-light-100 ${focusRing}`}
                   >
-                    <Search aria-hidden="true" className="size-4" strokeWidth={1.8} />
-                    Search
-                  </Link>
-                  <Link
-                    href={cartHref}
-                    onClick={() => setIsOpen(false)}
-                    className={`inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-light-300 bg-light-100 text-caption text-dark-900 hover:bg-light-200 ${focusRing}`}
-                  >
-                    <ShoppingBag
+                    {action.label}
+                    <ArrowUpRight
                       aria-hidden="true"
                       className="size-4"
                       strokeWidth={1.8}
                     />
-                    Quote{cartCount > 0 ? ` (${displayedCount})` : ""}
                   </Link>
-                  {action ? (
-                    <Link
-                      href={action.href}
-                      {...externalLinkProps(action.external)}
-                      onClick={() => setIsOpen(false)}
-                      className={`col-span-2 inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-green to-teal-700 px-5 text-caption text-light-100 shadow-[0_10px_24px_rgba(0,125,72,0.18)] sm:col-span-1 ${focusRing}`}
-                    >
-                      {action.label}
-                      <ArrowUpRight
-                        aria-hidden="true"
-                        className="size-4"
-                        strokeWidth={1.8}
-                      />
-                    </Link>
-                  ) : null}
-                </div>
+                ) : null}
               </nav>
             </div>
           </div>

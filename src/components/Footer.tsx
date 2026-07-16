@@ -61,21 +61,21 @@ export interface FooterProps {
 
 const defaultGroups: readonly FooterGroup[] = [
   {
-    title: "Explore",
+    title: "Shop",
     links: [
-      { label: "Solar products", href: "#products" },
-      { label: "Energy solutions", href: "#solutions" },
-      { label: "About us", href: "#about" },
-      { label: "Start a project", href: "#contact" },
+      { label: "Solar panels", href: "/?sector=solar#catalogue" },
+      { label: "Energy storage", href: "/?sector=storage#catalogue" },
+      { label: "EV chargers", href: "/?sector=charging#catalogue" },
+      { label: "Portable coolers", href: "/?sector=outdoors#catalogue" },
     ],
   },
   {
-    title: "Support",
+    title: "Marketplace",
     links: [
+      { label: "All products", href: "/#catalogue" },
+      { label: "Sign in", href: "/sign-in" },
+      { label: "Create account", href: "/sign-up" },
       { label: "Contact", href: "#contact" },
-      { label: "Delivery", href: "#delivery" },
-      { label: "Warranties", href: "#warranties" },
-      { label: "FAQs", href: "#faqs" },
     ],
   },
 ];
@@ -125,11 +125,7 @@ const defaultSocialLinks: readonly FooterSocialLink[] = [
   },
 ];
 
-const defaultLegalLinks: readonly FooterLink[] = [
-  { label: "Privacy", href: "#privacy" },
-  { label: "Terms", href: "#terms" },
-  { label: "Accessibility", href: "#accessibility" },
-];
+const defaultLegalLinks: readonly FooterLink[] = [];
 
 const defaultNewsletter: FooterNewsletter = {
   eyebrow: "Keep your energy up",
@@ -220,7 +216,7 @@ function NewsletterSignup({ newsletter }: { newsletter: FooterNewsletter }) {
 export function Footer({
   brandName = "PVtoEV",
   brandDescription =
-    "A modern marketplace for solar, storage, EV charging and the products powering a cleaner Australian home.",
+    "A focused collection for solar panels, energy storage, EV charging and portable cooling.",
   groups = defaultGroups,
   contactItems = defaultContactItems,
   socialLinks = defaultSocialLinks,
@@ -382,7 +378,7 @@ export function Footer({
         <div className="mt-6 grid gap-4 border-t border-light-300 pt-5 sm:grid-cols-[1fr_auto] sm:items-end">
           <div>
             <Link
-              href="#top"
+              href="/"
               aria-label={`${brandName} home`}
               className={`group inline-flex items-center gap-3 rounded-xl ${focusRing}`}
             >

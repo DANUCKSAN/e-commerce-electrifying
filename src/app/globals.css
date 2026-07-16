@@ -80,68 +80,8 @@
   }
 }
 
-@keyframes battery-float {
-  0%,
-  100% {
-    transform: translate3d(0, -7px, 0) rotate(-0.6deg);
-  }
-
-  50% {
-    transform: translate3d(0, 9px, 0) rotate(0.75deg);
-  }
-}
-
-@keyframes battery-shadow {
-  0%,
-  100% {
-    opacity: 0.52;
-    transform: translateX(-50%) scaleX(0.9);
-  }
-
-  50% {
-    opacity: 0.32;
-    transform: translateX(-50%) scaleX(1.05);
-  }
-}
-
-@keyframes reveal-on-scroll {
-  from {
-    opacity: 0;
-    transform: translate3d(0, 2.25rem, 0);
-  }
-
-  to {
-    opacity: 1;
-    transform: translate3d(0, 0, 0);
-  }
-}
-
-.battery-float {
-  animation: battery-float 5.2s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
-  transform-origin: 50% 56%;
-}
-
-.battery-shadow {
-  animation: battery-shadow 5.2s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
-  transform-origin: 50% 50%;
-}
-
-@supports (animation-timeline: view()) {
-  .reveal-on-scroll {
-    animation: reveal-on-scroll linear both;
-    animation-range: entry 5% cover 30%;
-    animation-timeline: view();
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
-  }
-
-  .battery-float,
-  .battery-shadow,
-  .reveal-on-scroll {
-    animation: none !important;
   }
 }

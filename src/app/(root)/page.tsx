@@ -1,507 +1,209 @@
-import { and, asc, desc, eq, gt, isNull, lte, or, sql } from "drizzle-orm";
 import {
-  ArrowRight,
-  ArrowUpRight,
+  ArrowDown,
   BatteryCharging,
   CarFront,
-  Gauge,
-  HousePlug,
+  Snowflake,
   SunMedium,
+  type LucideIcon,
 } from "lucide-react";
-import Image from "next/image";
 import Link from "next/link";
+import { Suspense } from "react";
 
-import BatteryHero from "@/components/BatteryHero";
-import Card, { type CardBadgeTone } from "@/components/Card";
-import { db, isDatabaseConfigured } from "@/db";
-import { sampleProducts } from "@/db/sample-products";
+import ProductCatalogue, {
+  type PriceFilter,
+  type SectorFilter,
+  type SortOrder,
+} from "@/components/ProductCatalogue";
+import { getCatalogue } from "@/lib/catalogue";
 import {
-  brands,
-  categories,
-  inventoryLevels,
-  offerPrices,
-  productCategories,
-  products,
-  productVariants,
-  sellerOffers,
-} from "@/db/schema";
+  createStorefrontProducts,
+  type ProductSector,
+} from "@/lib/storefront-products";
 
-export const dynamic = "force-dynamic";
+type StorefrontSearchParams = Promise<{
+  sector?: string | string[];
+  price?: string | string[];
+  sort?: string | string[];
+}>;
 
-type CatalogueProduct = {
-  slug: string;
-  name: string;
-  description: string;
-  category: string;
-  manufacturer: string;
-  specification: string;
-  priceCents: number;
-  stock: number;
-  featured: boolean;
-};
-
-type ProductImage = {
-  src: string;
-  alt: string;
-};
-
-const productImages: Record<string, ProductImage> = {
-  "demo-aiko-450w-solar-panel": {
-    src: "https://images.unsplash.com/photo-1509391366360-2e959784a276?auto=format&fit=crop&w=1400&q=82",
-    alt: "Rows of blue solar panels catching sunlight",
-  },
-  "demo-jinko-440w-solar-panel": {
-    src: "https://images.unsplash.com/photo-1521618755572-156ae0cdd74d?auto=format&fit=crop&w=1400&q=82",
-    alt: "Close view of a modern solar energy installation",
-  },
-  "demo-yingli-430w-solar-panel": {
-    src: "https://images.unsplash.com/photo-1624397640148-949b1732bb0a?auto=format&fit=crop&w=1400&q=82",
-    alt: "Solar panels installed across a residential rooftop",
-  },
-  "demo-anker-solix-2kwh-battery-module": {
-    src: "https://images.unsplash.com/photo-1780445392417-68b9dccc45f2?auto=format&fit=crop&w=1400&q=82",
-    alt: "Wall-mounted home solar battery and energy storage system",
-  },
-  "demo-bluetti-1500wh-portable-battery": {
-    src: "https://images.unsplash.com/photo-1780445392417-68b9dccc45f2?auto=format&fit=crop&w=1400&q=82",
-    alt: "Modern battery energy storage equipment",
-  },
-  "demo-tesla-wall-ev-charger": {
-    src: "https://images.unsplash.com/photo-1593941707874-ef25b8b4a92b?auto=format&fit=crop&w=1400&q=82",
-    alt: "Electric vehicle connected to a charging cable",
-  },
-  "demo-goodwe-22kw-ev-charger": {
-    src: "https://images.unsplash.com/photo-1593941707874-ef25b8b4a92b?auto=format&fit=crop&w=1400&q=82",
-    alt: "Electric vehicle charging beside a building",
-  },
-  "demo-sungrow-11kw-ev-charger": {
-    src: "https://images.unsplash.com/photo-1593941707874-ef25b8b4a92b?auto=format&fit=crop&w=1400&q=82",
-    alt: "Electric vehicle connected to a charging point",
-  },
-  "demo-anker-solix-40l-portable-cooler": {
-    src: "https://images.unsplash.com/photo-1523987355523-c7b5b0dd90a7?auto=format&fit=crop&w=1400&q=82",
-    alt: "Portable camping equipment set up outdoors",
-  },
-};
-
-const fallbackImage = productImages["demo-aiko-450w-solar-panel"];
-
-const money = new Intl.NumberFormat("en-AU", {
-  style: "currency",
-  currency: "AUD",
-  maximumFractionDigits: 0,
-});
-
-const energyFlow = [
-  {
-    icon: SunMedium,
-    step: "01",
-    title: "Make it",
-    description: "High-yield solar turns your roof into a quiet power station.",
-  },
-  {
-    icon: BatteryCharging,
-    step: "02",
-    title: "Keep it",
-    description: "Smart storage saves your clean energy for evenings and outages.",
-  },
-  {
-    icon: CarFront,
-    step: "03",
-    title: "Move with it",
-    description: "Solar-aware charging sends surplus energy straight to your EV.",
-  },
-] as const;
-
-let hasLoggedCatalogueFallback = false;
-
-async function getCatalogue(): Promise<CatalogueProduct[]> {
-  if (!isDatabaseConfigured) return sampleProducts;
-
-  try {
-    const liveProducts = await db
-      .select({
-        slug: products.slug,
-        name: products.name,
-        description: products.shortDescription,
-        category: categories.name,
-        manufacturer: brands.name,
-        specification: sql<string>`coalesce(${productVariants.specificationSummary}, ${productVariants.name})`,
-        priceCents: offerPrices.amountMinor,
-        stock:
-          sql<number>`coalesce(sum(greatest(${inventoryLevels.onHand} - ${inventoryLevels.reserved} - ${inventoryLevels.safetyStock}, 0)), 0)::int`.mapWith(
-            Number,
-          ),
-        featured: products.featured,
-      })
-      .from(products)
-      .innerJoin(brands, eq(products.brandId, brands.id))
-      .innerJoin(
-        productCategories,
-        and(
-          eq(productCategories.productId, products.id),
-          eq(productCategories.isPrimary, true),
-        ),
-      )
-      .innerJoin(categories, eq(productCategories.categoryId, categories.id))
-      .innerJoin(
-        productVariants,
-        and(
-          eq(productVariants.productId, products.id),
-          eq(productVariants.isDefault, true),
-          eq(productVariants.status, "active"),
-          isNull(productVariants.deletedAt),
-        ),
-      )
-      .innerJoin(
-        sellerOffers,
-        and(
-          eq(sellerOffers.variantId, productVariants.id),
-          eq(sellerOffers.status, "active"),
-          isNull(sellerOffers.deletedAt),
-        ),
-      )
-      .innerJoin(
-        offerPrices,
-        and(
-          eq(offerPrices.offerId, sellerOffers.id),
-          eq(offerPrices.priceType, "regular"),
-          eq(offerPrices.currency, "AUD"),
-          lte(offerPrices.startsAt, sql`now()`),
-          or(isNull(offerPrices.endsAt), gt(offerPrices.endsAt, sql`now()`)),
-        ),
-      )
-      .leftJoin(
-        inventoryLevels,
-        eq(inventoryLevels.offerId, sellerOffers.id),
-      )
-      .where(and(eq(products.status, "active"), isNull(products.deletedAt)))
-      .groupBy(
-        products.id,
-        categories.name,
-        brands.name,
-        productVariants.id,
-        offerPrices.id,
-      )
-      .orderBy(desc(products.featured), asc(products.name))
-      .limit(6);
-
-    return liveProducts.length > 0 ? liveProducts : sampleProducts;
-  } catch (error) {
-    if (process.env.NODE_ENV === "production") throw error;
-
-    if (!hasLoggedCatalogueFallback) {
-      hasLoggedCatalogueFallback = true;
-      console.warn(
-        "Catalogue database is unavailable; rendering development sample products.",
-        error instanceof Error ? error.message : "Unknown database error",
-      );
-    }
-
-    return sampleProducts;
-  }
-}
-
-function productBadge(product: CatalogueProduct): {
+const sectorLinks: ReadonlyArray<{
   label: string;
-  tone: CardBadgeTone;
-} {
-  if (product.featured) return { label: "Popular", tone: "green" };
-  if (product.stock < 20) return { label: "Limited", tone: "orange" };
-  return { label: "Ready to ship", tone: "neutral" };
+  description: string;
+  href: string;
+  icon: LucideIcon;
+}> = [
+  {
+    label: "Solar panels",
+    description: "Generate",
+    href: "/?sector=solar#catalogue",
+    icon: SunMedium,
+  },
+  {
+    label: "Energy storage",
+    description: "Store",
+    href: "/?sector=storage#catalogue",
+    icon: BatteryCharging,
+  },
+  {
+    label: "EV chargers",
+    description: "Charge",
+    href: "/?sector=charging#catalogue",
+    icon: CarFront,
+  },
+  {
+    label: "Portable coolers",
+    description: "Explore",
+    href: "/?sector=outdoors#catalogue",
+    icon: Snowflake,
+  },
+];
+
+function firstValue(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
 }
 
-export default async function StorefrontPage() {
-  const catalogue = await getCatalogue();
+function readSector(value: string | undefined): SectorFilter {
+  return ["solar", "storage", "charging", "outdoors"].includes(value ?? "")
+    ? (value as ProductSector)
+    : "all";
+}
+
+function readPrice(value: string | undefined): PriceFilter {
+  return ["under-500", "500-1000", "over-1000"].includes(value ?? "")
+    ? (value as PriceFilter)
+    : "all";
+}
+
+function readSort(value: string | undefined): SortOrder {
+  return ["price-asc", "price-desc"].includes(value ?? "")
+    ? (value as SortOrder)
+    : "curated";
+}
+
+function CatalogueSkeleton() {
+  return (
+    <section
+      aria-label="Loading products"
+      aria-busy="true"
+      className="bg-light-200 px-4 py-14 sm:px-6 lg:px-8 lg:py-24"
+    >
+      <div className="mx-auto max-w-[94rem] animate-pulse">
+        <div className="h-3 w-28 rounded-full bg-dark-900/10" />
+        <div className="mt-4 h-12 max-w-lg rounded-2xl bg-dark-900/10 sm:h-16" />
+        <div className="mt-9 h-36 rounded-[1.6rem] bg-dark-900/8" />
+        <div className="mt-7 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, index) => (
+            <div
+              key={index}
+              className="aspect-[0.78] rounded-[1.75rem] bg-dark-900/8"
+            />
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+async function CatalogueContent({
+  searchParams,
+}: {
+  searchParams: StorefrontSearchParams;
+}) {
+  const [query, catalogue] = await Promise.all([searchParams, getCatalogue()]);
+  const products = createStorefrontProducts(catalogue);
 
   return (
-    <main className="overflow-clip bg-light-100 font-jost text-dark-900">
-      <BatteryHero />
+    <ProductCatalogue
+      products={products}
+      sector={readSector(firstValue(query.sector))}
+      price={readPrice(firstValue(query.price))}
+      sort={readSort(firstValue(query.sort))}
+    />
+  );
+}
 
-      <section
-        id="products"
-        aria-labelledby="products-heading"
-        className="relative z-20 -mt-px scroll-mt-20 rounded-t-[2.25rem] bg-light-100 px-4 py-16 sm:rounded-t-[3.5rem] sm:px-6 sm:py-20 lg:px-8 lg:py-28"
-      >
-        <div className="mx-auto max-w-[94rem]">
-          <div className="reveal-on-scroll grid items-end gap-8 lg:grid-cols-[1fr_auto]">
+export default function StorefrontPage({
+  searchParams,
+}: {
+  searchParams: StorefrontSearchParams;
+}) {
+  return (
+    <main className="overflow-clip bg-light-200 font-jost text-dark-900">
+      <section className="relative isolate overflow-hidden bg-[#0d1714] px-4 pb-12 pt-14 text-light-100 sm:px-6 sm:pb-16 sm:pt-18 lg:px-8 lg:pb-20 lg:pt-24">
+        <div
+          aria-hidden="true"
+          className="absolute -right-32 -top-48 size-[34rem] rounded-full border border-white/10 sm:-right-20 sm:size-[42rem]"
+        />
+        <div
+          aria-hidden="true"
+          className="absolute -right-12 -top-20 size-[22rem] rounded-full border border-emerald-300/16 sm:size-[30rem]"
+        />
+        <div
+          aria-hidden="true"
+          className="absolute -bottom-48 left-[20%] size-[30rem] rounded-full bg-green/28 blur-[110px]"
+        />
+
+        <div className="relative mx-auto max-w-[94rem]">
+          <div className="grid gap-10 lg:grid-cols-[minmax(0,1.2fr)_minmax(20rem,0.8fr)] lg:items-end lg:gap-16">
             <div>
-              <p className="text-footnote font-semibold uppercase tracking-[0.17em] text-green">
-                The renewable edit
+              <p className="flex items-center gap-2 text-footnote font-semibold uppercase tracking-[0.19em] text-emerald-300">
+                <span aria-hidden="true" className="size-1.5 rounded-full bg-emerald-300" />
+                Four focused product sectors
               </p>
-              <h2
-                id="products-heading"
-                className="mt-4 max-w-[12ch] text-[clamp(2.7rem,7vw,6.8rem)] font-bold leading-[0.88] tracking-[-0.07em] text-dark-900"
-              >
-                Products that move energy smarter.
-              </h2>
-            </div>
-            <p className="max-w-md text-body text-dark-700 lg:pb-2 lg:text-lead">
-              A considered range for generating, storing, monitoring and using
-              clean power throughout the whole home.
-            </p>
-          </div>
-
-          <ul
-            aria-label="Product categories"
-            className="reveal-on-scroll mt-9 flex flex-wrap gap-2 sm:mt-12"
-          >
-            {[
-              "Solar panels",
-              "Portable batteries",
-              "EV chargers",
-              "Portable coolers",
-            ].map((category) => (
-                <li
-                  key={category}
-                  className="rounded-full border border-light-300 bg-light-200/70 px-4 py-2.5 text-caption text-dark-700"
-                >
-                  {category}
-                </li>
-              ))}
-          </ul>
-
-          <div className="mt-8 grid gap-5 sm:grid-cols-2 sm:gap-6 lg:mt-10 lg:grid-cols-3 lg:gap-7">
-            {catalogue.map((product, index) => {
-              const image = productImages[product.slug] ?? fallbackImage;
-
-              return (
-                <Card
-                  key={product.slug}
-                  className="reveal-on-scroll"
-                  title={product.name}
-                  description={product.description}
-                  image={image.src}
-                  imageAlt={image.alt}
-                  href="#contact"
-                  eyebrow={product.category}
-                  meta={product.specification}
-                  price={money.format(product.priceCents / 100)}
-                  badge={productBadge(product)}
-                  ctaLabel="Plan with this"
-                  aspect="landscape"
-                  imageFit="cover"
-                  imageSizes="(max-width: 639px) calc(100vw - 2rem), (max-width: 1023px) 50vw, 33vw"
-                  preload={index === 0}
-                />
-              );
-            })}
-          </div>
-        </div>
-      </section>
-
-      <section
-        id="solutions"
-        aria-labelledby="solutions-heading"
-        className="scroll-mt-20 bg-light-100 px-4 pb-16 sm:px-6 sm:pb-20 lg:px-8 lg:pb-28"
-      >
-        <div className="reveal-on-scroll relative mx-auto max-w-[94rem] overflow-hidden rounded-[2.25rem] bg-[#0d1714] px-5 py-10 text-light-100 shadow-[0_36px_90px_rgba(13,23,20,0.16)] sm:rounded-[3.25rem] sm:px-8 sm:py-14 lg:px-14 lg:py-16">
-          <div
-            aria-hidden="true"
-            className="absolute -right-24 -top-28 size-[24rem] rounded-full bg-emerald-400/15 blur-3xl"
-          />
-          <div
-            aria-hidden="true"
-            className="absolute -bottom-36 left-[28%] size-[24rem] rounded-full bg-cyan-400/10 blur-3xl"
-          />
-
-          <div className="relative grid gap-12 xl:grid-cols-[0.72fr_1.28fr] xl:items-end xl:gap-16">
-            <div>
-              <p className="text-footnote font-semibold uppercase tracking-[0.17em] text-emerald-300">
-                One connected system
-              </p>
-              <h2
-                id="solutions-heading"
-                className="mt-4 max-w-[9ch] text-[clamp(2.6rem,6vw,5.8rem)] font-bold leading-[0.9] tracking-[-0.065em]"
-              >
-                Make it. Keep it. Move with it.
-              </h2>
-              <p className="mt-6 max-w-lg text-body leading-7 text-white/58 sm:text-lead">
-                Your panels, battery and charger work as one responsive energy
-                loop—automatically choosing the cleanest, lowest-cost path.
-              </p>
+              <h1 className="mt-5 max-w-[10ch] text-[clamp(3.25rem,8vw,7.8rem)] font-bold leading-[0.84] tracking-[-0.075em]">
+                Better energy, without the noise.
+              </h1>
             </div>
 
-            <ol className="grid gap-3 md:grid-cols-3">
-              {energyFlow.map((item, index) => {
-                const Icon = item.icon;
+            <div className="lg:pb-2">
+              <p className="max-w-xl text-body leading-7 text-white/62 sm:text-lead sm:leading-8">
+                Shop solar panels, energy storage, EV chargers and portable
+                coolers in one focused renewable marketplace.
+              </p>
+              <Link
+                href="#catalogue"
+                className="mt-7 inline-flex min-h-12 items-center gap-3 rounded-full bg-emerald-300 px-5 text-caption font-semibold text-dark-900 shadow-[0_14px_34px_rgba(110,231,183,0.18)] transition-[background-color,transform] duration-300 hover:-translate-y-0.5 hover:bg-light-100 motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-light-100 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0d1714]"
+              >
+                Shop live catalogue
+                <ArrowDown aria-hidden="true" className="size-4" strokeWidth={1.8} />
+              </Link>
+            </div>
+          </div>
+
+          <nav aria-label="Shop by product sector" className="mt-12 sm:mt-16 lg:mt-20">
+            <ul className="grid grid-cols-2 gap-2 md:grid-cols-4 md:gap-3">
+              {sectorLinks.map((sector, index) => {
+                const Icon = sector.icon;
 
                 return (
-                  <li
-                    key={item.title}
-                    className="group relative rounded-[1.75rem] border border-white/10 bg-white/[0.055] p-5 backdrop-blur-sm transition-[background-color,transform] duration-300 hover:-translate-y-1 hover:bg-white/[0.085] motion-reduce:transition-none sm:p-6"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="flex size-11 items-center justify-center rounded-2xl bg-emerald-300 text-dark-900">
-                        <Icon className="size-5" strokeWidth={1.8} />
+                  <li key={sector.href}>
+                    <Link
+                      href={sector.href}
+                      className="group flex min-h-24 items-center gap-3 rounded-[1.35rem] border border-white/10 bg-white/[0.055] p-3.5 backdrop-blur-sm transition-[background-color,border-color,transform] duration-300 hover:-translate-y-0.5 hover:border-white/20 hover:bg-white/[0.09] motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 sm:min-h-28 sm:gap-4 sm:p-4"
+                    >
+                      <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-white/9 text-emerald-300 transition-colors duration-300 group-hover:bg-emerald-300 group-hover:text-dark-900 sm:size-11 sm:rounded-2xl">
+                        <Icon aria-hidden="true" className="size-5" strokeWidth={1.8} />
                       </span>
-                      <span className="text-footnote font-medium tracking-[0.15em] text-white/35">
-                        {item.step}
+                      <span className="min-w-0">
+                        <span className="block text-footnote uppercase tracking-[0.12em] text-white/40">
+                          0{index + 1} · {sector.description}
+                        </span>
+                        <span className="mt-1 block text-caption font-semibold text-light-100 sm:text-body-medium">
+                          {sector.label}
+                        </span>
                       </span>
-                    </div>
-                    <h3 className="mt-8 text-2xl font-semibold tracking-[-0.035em]">
-                      {item.title}
-                    </h3>
-                    <p className="mt-3 text-body text-white/52">
-                      {item.description}
-                    </p>
-
-                    {index < energyFlow.length - 1 ? (
-                      <ArrowRight
-                        aria-hidden="true"
-                        className="absolute -right-[1.1rem] top-1/2 z-10 hidden size-5 -translate-y-1/2 text-emerald-300 md:block"
-                        strokeWidth={1.6}
-                      />
-                    ) : null}
-                  </li>
-                );
-              })}
-            </ol>
-          </div>
-
-          <dl className="relative mt-12 grid grid-cols-2 gap-x-4 gap-y-7 border-t border-white/10 pt-8 sm:grid-cols-4 lg:mt-16">
-            {[
-              ["22.5%", "panel efficiency"],
-              ["13.5 kWh", "modular storage"],
-              ["22 kW", "smart EV charging"],
-              ["1 app", "whole-home visibility"],
-            ].map(([value, label]) => (
-              <div key={label}>
-                <dt className="text-footnote uppercase tracking-[0.12em] text-white/38">
-                  {label}
-                </dt>
-                <dd className="mt-2 text-xl font-semibold tracking-[-0.035em] text-white sm:text-2xl">
-                  {value}
-                </dd>
-              </div>
-            ))}
-          </dl>
-        </div>
-      </section>
-
-      <section
-        id="about"
-        aria-labelledby="about-heading"
-        className="scroll-mt-20 bg-[#edf7f3] px-4 py-16 sm:px-6 sm:py-20 lg:px-8 lg:py-28"
-      >
-        <div className="mx-auto grid max-w-[94rem] gap-10 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:gap-16">
-          <div className="reveal-on-scroll relative min-h-[26rem] overflow-hidden rounded-[2.25rem] bg-dark-900 sm:min-h-[34rem] sm:rounded-[3rem] lg:min-h-[42rem]">
-            <Image
-              fill
-              src="https://images.unsplash.com/photo-1624397640148-949b1732bb0a?auto=format&fit=crop&w=1800&q=84"
-              alt="Renewable energy specialist installing solar panels on a roof"
-              sizes="(max-width: 1023px) calc(100vw - 2rem), 52vw"
-              className="object-cover"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-dark-900/70 via-transparent to-transparent" />
-            <div className="absolute inset-x-5 bottom-5 grid grid-cols-2 gap-2 sm:inset-x-7 sm:bottom-7 sm:grid-cols-3">
-              {[
-                ["NSW", "local support"],
-                ["10 yr", "warranty options"],
-                ["Clean", "design-led installs"],
-              ].map(([value, label], index) => (
-                <div
-                  key={label}
-                  className={`rounded-2xl border border-white/20 bg-white/14 p-4 text-white backdrop-blur-xl ${index === 2 ? "col-span-2 sm:col-span-1" : ""}`}
-                >
-                  <p className="text-xl font-semibold tracking-[-0.03em]">
-                    {value}
-                  </p>
-                  <p className="mt-1 text-footnote text-white/65">{label}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="reveal-on-scroll lg:pr-8">
-            <p className="text-footnote font-semibold uppercase tracking-[0.17em] text-green">
-              Built around your home
-            </p>
-            <h2
-              id="about-heading"
-              className="mt-4 max-w-[11ch] text-[clamp(2.65rem,6vw,5.8rem)] font-bold leading-[0.9] tracking-[-0.065em]"
-            >
-              Less energy noise. More everyday control.
-            </h2>
-            <p className="mt-6 max-w-xl text-body leading-7 text-dark-700 sm:text-lead">
-              We pair dependable hardware with practical guidance, so your
-              renewable system feels simple from the first conversation to the
-              first bill it lowers.
-            </p>
-
-            <ul className="mt-9 grid gap-3">
-              {[
-                {
-                  icon: HousePlug,
-                  title: "Designed as one system",
-                  copy: "Products are selected to communicate, scale and work together.",
-                },
-                {
-                  icon: Gauge,
-                  title: "Measured around real use",
-                  copy: "Recommendations follow your roof, loads, tariffs and future EV plans.",
-                },
-                {
-                  icon: BatteryCharging,
-                  title: "Ready for what comes next",
-                  copy: "Start with solar today, then add storage and charging when it suits.",
-                },
-              ].map((item) => {
-                const Icon = item.icon;
-
-                return (
-                  <li
-                    key={item.title}
-                    className="grid grid-cols-[auto_1fr] gap-4 rounded-[1.5rem] border border-dark-900/8 bg-white/60 p-4 sm:p-5"
-                  >
-                    <span className="flex size-11 items-center justify-center rounded-2xl bg-dark-900 text-emerald-300">
-                      <Icon className="size-5" strokeWidth={1.8} />
-                    </span>
-                    <div>
-                      <h3 className="text-body-medium font-semibold text-dark-900">
-                        {item.title}
-                      </h3>
-                      <p className="mt-1 text-caption text-dark-700">
-                        {item.copy}
-                      </p>
-                    </div>
+                    </Link>
                   </li>
                 );
               })}
             </ul>
-          </div>
+          </nav>
         </div>
       </section>
 
-      <section
-        id="journal"
-        aria-labelledby="cta-heading"
-        className="scroll-mt-20 bg-light-100 px-4 py-8 sm:px-6 sm:py-10 lg:px-8 lg:py-14"
-      >
-        <div className="reveal-on-scroll mx-auto grid max-w-[94rem] items-center gap-7 rounded-[2.25rem] border border-light-300 bg-[linear-gradient(120deg,#ffffff,#f2f8f5_54%,#e8f5fb)] px-5 py-8 shadow-[0_22px_70px_rgba(17,17,17,0.055)] sm:rounded-[3rem] sm:px-8 sm:py-10 lg:grid-cols-[1fr_auto] lg:px-12 lg:py-12">
-          <div>
-            <p className="text-footnote font-semibold uppercase tracking-[0.17em] text-green">
-              Your energy plan starts here
-            </p>
-            <h2
-              id="cta-heading"
-              className="mt-3 max-w-[15ch] text-[clamp(2.2rem,5vw,4.8rem)] font-bold leading-[0.92] tracking-[-0.06em]"
-            >
-              Ready to make your home work smarter?
-            </h2>
-          </div>
-          <Link
-            href="#contact"
-            className="group inline-flex min-h-14 w-fit items-center gap-3 rounded-full bg-green px-6 text-caption text-light-100 shadow-[0_14px_32px_rgba(0,125,72,0.2)] transition-[background-color,transform] duration-300 hover:-translate-y-0.5 hover:bg-dark-900 motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green focus-visible:ring-offset-2"
-          >
-            Start a project
-            <ArrowUpRight
-              className="size-4 transition-transform duration-300 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 motion-reduce:transition-none"
-              strokeWidth={1.8}
-            />
-          </Link>
-        </div>
-      </section>
+      <Suspense fallback={<CatalogueSkeleton />}>
+        <CatalogueContent searchParams={searchParams} />
+      </Suspense>
     </main>
   );
 }
